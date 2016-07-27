@@ -1,0 +1,9 @@
+PRODUCT: electron
+SHORTDESC: Electron source code
+REQUEST_ID: TPS-32333
+LICENSE_TYPE: MIT License
+LICENSE_URL: https://github.com/electron/electron/blob/v1.3.1/LICENSE
+USAGE: Used inside MSFT for developing cross os clients and applications.
+DISTRIBUTED: Yes
+HOMEPAGE: github.com
+SOURCE: https://github.com/electron/electron/archive/v1.3.1.zip
