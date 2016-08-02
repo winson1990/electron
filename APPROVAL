@@ -1,5 +1,5 @@
 PRODUCT: electron
-SHORTDESC: Electron source code
+SHORTDESC: 
 REQUEST_ID: TPS-32333
 LICENSE_TYPE: MIT License
 LICENSE_URL: https://github.com/electron/electron/blob/v1.3.1/LICENSE
