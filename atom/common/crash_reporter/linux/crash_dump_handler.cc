@@ -7,6 +7,7 @@
 // calls when in seccomp mode.
 
 #include "atom/common/crash_reporter/linux/crash_dump_handler.h"
+#include "microsoft/atom/crash_dump_handler_linux.h"
 
 #include <poll.h>
 
@@ -551,110 +552,7 @@ void HandleCrashDump(const BreakpadInfo& info) {
   mime_boundary[28 + 16] = 0;
   IGNORE_RET(sys_close(ufd));
 
-  // The MIME block looks like this:
-  //   BOUNDARY \r\n
-  //   Content-Disposition: form-data; name="prod" \r\n \r\n
-  //   Chrome_Linux \r\n
-  //   BOUNDARY \r\n
-  //   Content-Disposition: form-data; name="ver" \r\n \r\n
-  //   1.2.3.4 \r\n
-  //   BOUNDARY \r\n
-  //
-  //   zero or one:
-  //   Content-Disposition: form-data; name="ptime" \r\n \r\n
-  //   abcdef \r\n
-  //   BOUNDARY \r\n
-  //
-  //   zero or one:
-  //   Content-Disposition: form-data; name="ptype" \r\n \r\n
-  //   abcdef \r\n
-  //   BOUNDARY \r\n
-  //
-  //   zero or one:
-  //   Content-Disposition: form-data; name="lsb-release" \r\n \r\n
-  //   abcdef \r\n
-  //   BOUNDARY \r\n
-  //
-  //   zero or one:
-  //   Content-Disposition: form-data; name="oom-size" \r\n \r\n
-  //   1234567890 \r\n
-  //   BOUNDARY \r\n
-  //
-  //   zero or more (up to CrashKeyStorage::num_entries = 64):
-  //   Content-Disposition: form-data; name=crash-key-name \r\n
-  //   crash-key-value \r\n
-  //   BOUNDARY \r\n
-  //
-  //   Content-Disposition: form-data; name="dump"; filename="dump" \r\n
-  //   Content-Type: application/octet-stream \r\n \r\n
-  //   <dump contents>
-  //   \r\n BOUNDARY -- \r\n
-
-  MimeWriter writer(temp_file_fd, mime_boundary);
-  {
-    writer.AddBoundary();
-    if (info.pid > 0) {
-      char pid_value_buf[kUint64StringSize];
-      uint64_t pid_value_len = my_uint64_len(info.pid);
-      my_uint64tos(pid_value_buf, info.pid, pid_value_len);
-      static const char pid_key_name[] = "pid";
-      writer.AddPairData(pid_key_name, sizeof(pid_key_name) - 1,
-                         pid_value_buf, pid_value_len);
-      writer.AddBoundary();
-    }
-    writer.Flush();
-  }
-
-  if (info.process_start_time > 0) {
-    struct kernel_timeval tv;
-    if (!sys_gettimeofday(&tv, NULL)) {
-      uint64_t time = kernel_timeval_to_ms(&tv);
-      if (time > info.process_start_time) {
-        time -= info.process_start_time;
-        char time_str[kUint64StringSize];
-        const unsigned time_len = my_uint64_len(time);
-        my_uint64tos(time_str, time, time_len);
-
-        static const char process_time_msg[] = "ptime";
-        writer.AddPairData(process_time_msg, sizeof(process_time_msg) - 1,
-                           time_str, time_len);
-        writer.AddBoundary();
-        writer.Flush();
-      }
-    }
-  }
-
-  if (info.distro_length) {
-    static const char distro_msg[] = "lsb-release";
-    writer.AddPairString(distro_msg, info.distro);
-    writer.AddBoundary();
-    writer.Flush();
-  }
-
-  if (info.oom_size) {
-    char oom_size_str[kUint64StringSize];
-    const unsigned oom_size_len = my_uint64_len(info.oom_size);
-    my_uint64tos(oom_size_str, info.oom_size, oom_size_len);
-    static const char oom_size_msg[] = "oom-size";
-    writer.AddPairData(oom_size_msg, sizeof(oom_size_msg) - 1,
-                       oom_size_str, oom_size_len);
-    writer.AddBoundary();
-    writer.Flush();
-  }
-
-  if (info.crash_keys) {
-    CrashKeyStorage::Iterator crash_key_iterator(*info.crash_keys);
-    const CrashKeyStorage::Entry* entry;
-    while ((entry = crash_key_iterator.Next())) {
-      writer.AddPairString(entry->key, entry->value);
-      writer.AddBoundary();
-      writer.Flush();
-    }
-  }
-
-  writer.AddFileContents(g_dump_msg, dump_data, dump_size);
-  writer.AddEnd();
-  writer.Flush();
+  microsoft::WriteHaCrashReport(temp_file_fd, mime_boundary, info, dump_size, dump_data);
 
   IGNORE_RET(sys_close(temp_file_fd));
 
