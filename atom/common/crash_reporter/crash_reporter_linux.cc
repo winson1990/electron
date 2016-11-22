@@ -4,6 +4,7 @@
 // found in the LICENSE file.
 
 #include "atom/common/crash_reporter/crash_reporter_linux.h"
+#include "microsoft/atom/linux_util.h"
 
 #include <sys/time.h>
 #include <unistd.h>
@@ -50,7 +51,7 @@ CrashReporterLinux::CrashReporterLinux()
   }
 
   // Make base::g_linux_distro work.
-  base::SetLinuxDistro(base::GetLinuxDistro());
+  base::SetLinuxDistro(microsoft::GetLinuxDistro());
 }
 
 CrashReporterLinux::~CrashReporterLinux() {
