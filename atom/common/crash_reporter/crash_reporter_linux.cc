@@ -4,7 +4,6 @@
 // found in the LICENSE file.
 
 #include "atom/common/crash_reporter/crash_reporter_linux.h"
-#include "microsoft/atom/linux_util.h"
 
 #include <sys/time.h>
 #include <unistd.h>
@@ -18,6 +17,7 @@
 #include "base/logging.h"
 #include "base/memory/singleton.h"
 #include "base/process/memory.h"
+#include "microsoft/atom/linux_util.h"
 #include "vendor/breakpad/src/client/linux/handler/exception_handler.h"
 #include "vendor/breakpad/src/common/linux/linux_libc_support.h"
 

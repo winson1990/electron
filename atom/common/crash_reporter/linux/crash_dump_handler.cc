@@ -552,7 +552,8 @@ void HandleCrashDump(const BreakpadInfo& info) {
   mime_boundary[28 + 16] = 0;
   IGNORE_RET(sys_close(ufd));
 
-  microsoft::WriteHaCrashReport(temp_file_fd, mime_boundary, info, dump_size, dump_data);
+  microsoft::WriteHaCrashReport(temp_file_fd, mime_boundary, info,
+                                dump_size, dump_data);
 
   IGNORE_RET(sys_close(temp_file_fd));
 
