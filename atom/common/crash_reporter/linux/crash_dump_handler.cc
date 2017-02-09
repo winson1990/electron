@@ -613,7 +613,7 @@ void HandleCrashDump(const BreakpadInfo& info) {
         char id_buf[kCrashIdLength + 1];
         size_t bytes_read =
             WaitForCrashReportUploadProcess(fds[0], kCrashIdLength, id_buf);
-        HandleCrashReportId(id_buf, bytes_read, kCrashIdLength);
+        microsoft::HandleCrashReportResponse(id_buf, bytes_read);
 
         if (sys_waitpid(upload_child, NULL, WNOHANG) == 0) {
           // Upload process is still around, kill it.
