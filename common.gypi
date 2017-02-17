@@ -1,6 +1,7 @@
 {
   'includes': [
     'toolchain.gypi',
+    'microsoft/filenames.gypi',
     'brightray/brightray.gypi',
   ],
   'variables': {

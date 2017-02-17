@@ -636,6 +636,7 @@
       'chromium_src/extensions/common/url_pattern.h',
       'chromium_src/library_loaders/libspeechd_loader.cc',
       'chromium_src/library_loaders/libspeechd.h',
+      '<@(microsoft_atom_files)',
       '<@(native_mate_files)',
       '<(SHARED_INTERMEDIATE_DIR)/atom_natives.h',
       '<(SHARED_INTERMEDIATE_DIR)/grit/pdf_viewer_resources_map.cc',
