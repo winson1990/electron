@@ -17,6 +17,7 @@
 #include "base/strings/string_util.h"
 #include "base/time/time.h"
 #include "base/win/windows_version.h"
+#include "microsoft/atom/crash_dump_handler_win.h"
 #include "vendor/breakpad/src/client/windows/crash_generation/client_info.h"
 #include "vendor/breakpad/src/client/windows/crash_generation/crash_generation_server.h"
 #include "vendor/breakpad/src/client/windows/sender/crash_report_sender.h"
@@ -170,10 +171,14 @@ struct DumpJobInfo {
   CrashService* self;
   CrashMap map;
   std::wstring dump_path;
+  std::wstring crash_keys_path;
+  std::wstring log_path;
 
   DumpJobInfo(DWORD process_id, CrashService* service,
-              const CrashMap& crash_map, const std::wstring& path)
-      : pid(process_id), self(service), map(crash_map), dump_path(path) {
+              const CrashMap& crash_map, const std::wstring& path,
+              const std::wstring& crash_keys_path, const std::wstring& log_path)
+      : pid(process_id), self(service), map(crash_map), dump_path(path),
+      crash_keys_path(crash_keys_path), log_path(log_path) {
   }
 };
 
@@ -384,6 +389,16 @@ void CrashService::OnClientDumpRequest(void* context,
     dump_location = alternate_dump_location;
   }
 
+  // create HockeyApp log file
+  base::FilePath log_location = base::FilePath(dump_location.value() + L".log");
+  if (!microsoft::CreateHockeyAppLogFile(log_location.value(), map))
+    LOG(ERROR) << "cannot generate HockeyApp log file "<< log_location.value();
+
+  // create crash_keys file
+  base::FilePath crash_keys_location = base::FilePath(dump_location.value() + L"-crash_keys.txt");
+  if (!microsoft::CreateCrashKeysFile(crash_keys_location.value(), map))
+    LOG(ERROR) << "cannot generate crash_keys file "<< crash_keys_location.value();
+
   DWORD pid = client_info->pid();
   VLOG(1) << "dump for pid = " << pid << " is " << dump_location.value();
 
@@ -397,7 +412,9 @@ void CrashService::OnClientDumpRequest(void* context,
   // Send the crash dump using a worker thread. This operation has retry
   // logic in case there is no internet connection at the time.
   DumpJobInfo* dump_job = new DumpJobInfo(pid, self, map,
-                                          dump_location.value());
+                                          dump_location.value(),
+                                          crash_keys_location.value(),
+                                          log_location.value());
   if (!::QueueUserWorkItem(&CrashService::AsyncSendDump,
                            dump_job, WT_EXECUTELONGFUNCTION)) {
     LOG(ERROR) << "could not queue job";
@@ -434,11 +451,13 @@ DWORD CrashService::AsyncSendDump(void* context) {
       // termination of the service object.
       base::AutoLock lock(info->self->sending_);
       VLOG(1) << "trying to send report for pid = " << info->pid;
-      std::map<std::wstring, std::wstring> file_map;
-      file_map[L"upload_file_minidump"] = info->dump_path;
+      std::map<std::wstring, std::wstring> file_map, param_map;
+      file_map[L"attachment0"] = info->dump_path;
+      file_map[L"attachment1"] = info->crash_keys_path;
+      file_map[L"log"] = info->log_path;
       google_breakpad::ReportResult send_result
           = info->self->sender_->SendCrashReport(info->self->reporter_url_,
-                                                 info->map,
+                                                 param_map,
                                                  file_map,
                                                  &report_id);
       switch (send_result) {
@@ -451,6 +470,7 @@ DWORD CrashService::AsyncSendDump(void* context) {
           retry_round = 0;
           break;
         case google_breakpad::RESULT_SUCCEEDED:
+          report_id = L"<none>";
           ++info->self->requests_sent_;
           ++info->self->requests_handled_;
           retry_round = 0;
@@ -471,6 +491,10 @@ DWORD CrashService::AsyncSendDump(void* context) {
 
   if (!::DeleteFileW(info->dump_path.c_str()))
     LOG(WARNING) << "could not delete " << info->dump_path;
+  if (!::DeleteFileW(info->crash_keys_path.c_str()))
+    LOG(WARNING) << "could not delete " << info->crash_keys_path;
+  if (!::DeleteFileW(info->log_path.c_str()))
+    LOG(WARNING) << "could not delete " << info->log_path;
 
   delete info;
   return 0;
