@@ -74,6 +74,8 @@ void AtomBindings::BindTo(v8::Isolate* isolate,
 
     // TODO(kevinsawicki): Remove in 2.0
     versions.Set("atom-shell", ATOM_VERSION_STRING);
+
+    versions.Set("microsoft-build", ATOM_VERSION_STRING);
   }
 }
 
