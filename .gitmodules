@@ -1,0 +1,43 @@
+[submodule "vendor/boto"]
+	path = vendor/boto
+	url = https://skype.visualstudio.com/DefaultCollection/TPS/_git/boto-boto
+	branch = boto-boto_f7574aa
+[submodule "vendor/breakpad"]
+	path = vendor/breakpad
+	url = https://skype.visualstudio.com/DefaultCollection/TPS/_git/electron-chromium-breakpad
+	branch = develop-1.8.1
+[submodule "vendor/crashpad"]
+	path = vendor/crashpad
+	url = https://skype.visualstudio.com/DefaultCollection/TPS/_git/electron-crashpad
+	branch = develop-1.8.1
+[submodule "vendor/depot_tools"]
+	path = vendor/depot_tools
+	url = https://skype.visualstudio.com/DefaultCollection/TPS/_git/chromium-depot-tools
+	branch = chromium-depot-tools_4fa73b8
+[submodule "vendor/gyp"]
+	path = vendor/gyp
+	url = https://skype.visualstudio.com/DefaultCollection/TPS/_git/electron-gyp
+	branch = electron-gyp_549e55a
+[submodule "vendor/libchromiumcontent"]
+	path = vendor/libchromiumcontent
+	url = https://skype.visualstudio.com/DefaultCollection/TPS/_git/electron-libchromiumcontent
+	branch = develop-1.8.1
+[submodule "vendor/native_mate"]
+	path = vendor/native_mate
+	url = https://skype.visualstudio.com/DefaultCollection/TPS/_git/zcbenz-native-mate
+	branch = zcbenz-native-mate_f047bb6
+[submodule "vendor/node"]
+	path = vendor/node
+	url = https://skype.visualstudio.com/DefaultCollection/TPS/_git/electron-node
+	branch = electron-node_dc8fe9d
+[submodule "vendor/pdf_viewer"]
+	path = vendor/pdf_viewer
+	url = https://skype.visualstudio.com/DefaultCollection/TPS/_git/pdf-viewer
+	branch = develop-1.8.1
+[submodule "vendor/requests"]
+	path = vendor/requests
+	url = https://skype.visualstudio.com/DefaultCollection/TPS/_git/kennethreitz-requests
+	branch = kennethreitz-requests_e4d59be
+[submodule "microsoft"]
+	path = microsoft
+	url = https://skype.visualstudio.com/DefaultCollection/SCC/_git/client-shared_electron_electron-private
