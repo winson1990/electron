@@ -5,6 +5,7 @@
 #ifndef ATOM_BROWSER_BRIDGE_TASK_RUNNER_H_
 #define ATOM_BROWSER_BRIDGE_TASK_RUNNER_H_
 
+#include <tuple>
 #include <vector>
 
 #include "base/single_thread_task_runner.h"
@@ -24,17 +25,17 @@ class BridgeTaskRunner : public base::SingleThreadTaskRunner {
 
   // base::SingleThreadTaskRunner:
   bool PostDelayedTask(const tracked_objects::Location& from_here,
-                       const base::Closure& task,
+                       base::OnceClosure task,
                        base::TimeDelta delay) override;
   bool RunsTasksOnCurrentThread() const override;
   bool PostNonNestableDelayedTask(
       const tracked_objects::Location& from_here,
-      const base::Closure& task,
+      base::OnceClosure task,
       base::TimeDelta delay) override;
 
  private:
-  using TaskPair = base::Tuple<
-      tracked_objects::Location, base::Closure, base::TimeDelta>;
+  using TaskPair = std::tuple<
+      tracked_objects::Location, base::OnceClosure, base::TimeDelta>;
   std::vector<TaskPair> tasks_;
   std::vector<TaskPair> non_nestable_tasks_;
 

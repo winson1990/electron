@@ -19,11 +19,11 @@ namespace atom {
 namespace {
 
 content::RenderView* GetCurrentRenderView() {
-  WebLocalFrame* frame = WebLocalFrame::frameForCurrentContext();
+  WebLocalFrame* frame = WebLocalFrame::FrameForCurrentContext();
   if (!frame)
     return nullptr;
 
-  WebView* view = frame->view();
+  WebView* view = frame->View();
   if (!view)
     return nullptr;  // can happen during closing.
 
@@ -41,14 +41,20 @@ void RemoteObjectFreer::BindTo(
 RemoteObjectFreer::RemoteObjectFreer(
     v8::Isolate* isolate, v8::Local<v8::Object> target, int object_id)
     : ObjectLifeMonitor(isolate, target),
-      object_id_(object_id) {
+      object_id_(object_id),
+      routing_id_(MSG_ROUTING_NONE) {
+  content::RenderView* render_view = GetCurrentRenderView();
+  if (render_view) {
+    routing_id_ = render_view->GetRoutingID();
+  }
 }
 
 RemoteObjectFreer::~RemoteObjectFreer() {
 }
 
 void RemoteObjectFreer::RunDestructor() {
-  content::RenderView* render_view = GetCurrentRenderView();
+  content::RenderView* render_view =
+      content::RenderView::FromRoutingID(routing_id_);
   if (!render_view)
     return;
 

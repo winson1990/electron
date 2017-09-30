@@ -14,13 +14,12 @@
 #include "printing/page_size_margins.h"
 #include "printing/pdf_metafile_skia.h"
 #include "printing/units.h"
-#include "skia/ext/platform_device.h"
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
 
 
 namespace printing {
 
-using blink::WebFrame;
+using blink::WebLocalFrame;
 
 bool PrintWebViewHelper::RenderPreviewPage(
     int page_number,
@@ -31,7 +30,7 @@ bool PrintWebViewHelper::RenderPreviewPage(
   std::unique_ptr<PdfMetafileSkia> draft_metafile;
   PdfMetafileSkia* initial_render_metafile = print_preview_context_.metafile();
   if (print_preview_context_.IsModifiable() && is_print_ready_metafile_sent_) {
-    draft_metafile.reset(new PdfMetafileSkia);
+    draft_metafile.reset(new PdfMetafileSkia(PDF_SKIA_DOCUMENT_TYPE));
     initial_render_metafile = draft_metafile.get();
   }
 
@@ -49,14 +48,15 @@ bool PrintWebViewHelper::RenderPreviewPage(
              print_preview_context_.generate_draft_pages()) {
     DCHECK(!draft_metafile.get());
     draft_metafile =
-        print_preview_context_.metafile()->GetMetafileForCurrentPage();
+        print_preview_context_.metafile()->GetMetafileForCurrentPage(
+            PDF_SKIA_DOCUMENT_TYPE);
   }
   return PreviewPageRendered(page_number, draft_metafile.get());
 }
 
-bool PrintWebViewHelper::PrintPagesNative(blink::WebFrame* frame,
+bool PrintWebViewHelper::PrintPagesNative(blink::WebLocalFrame* frame,
                                           int page_count) {
-  PdfMetafileSkia metafile;
+  PdfMetafileSkia metafile(PDF_SKIA_DOCUMENT_TYPE);
   if (!metafile.Init())
     return false;
 
@@ -113,6 +113,7 @@ bool PrintWebViewHelper::PrintPagesNative(blink::WebFrame* frame,
     printed_page_params.content_area = content_area_in_dpi[i];
     Send(new PrintHostMsg_DidPrintPage(routing_id(), printed_page_params));
     // Send the rest of the pages with an invalid metafile handle.
+    printed_page_params.metafile_data_handle.Close();
     printed_page_params.metafile_data_handle = base::SharedMemoryHandle();
   }
   return true;
@@ -120,7 +121,7 @@ bool PrintWebViewHelper::PrintPagesNative(blink::WebFrame* frame,
 
 void PrintWebViewHelper::PrintPageInternal(
     const PrintMsg_PrintPage_Params& params,
-    WebFrame* frame,
+    WebLocalFrame* frame,
     PdfMetafileSkia* metafile,
     gfx::Size* page_size_in_dpi,
     gfx::Rect* content_area_in_dpi) {
@@ -156,15 +157,15 @@ void PrintWebViewHelper::PrintPageInternal(
 #endif
 
   float webkit_page_shrink_factor =
-      frame->getPrintPageShrink(params.page_number);
+      frame->GetPrintPageShrink(params.page_number);
   float scale_factor = css_scale_factor * webkit_page_shrink_factor;
 
-  SkCanvas* canvas = metafile->GetVectorCanvasForNewPage(
-      page_size, canvas_area, scale_factor);
+  cc::PaintCanvas* canvas =
+      metafile->GetVectorCanvasForNewPage(page_size, canvas_area, scale_factor);
   if (!canvas)
     return;
 
-  MetafileSkiaWrapper::SetMetafileOnCanvas(*canvas, metafile);
+  MetafileSkiaWrapper::SetMetafileOnCanvas(canvas, metafile);
 
 #if 0
   if (params.params.display_header_footer) {
@@ -198,22 +199,19 @@ bool PrintWebViewHelper::CopyMetafileDataToSharedMem(
   if (buf_size == 0)
     return false;
 
-  base::SharedMemory shared_buf;
-  // Allocate a shared memory buffer to hold the generated metafile data.
-  if (!shared_buf.CreateAndMapAnonymous(buf_size))
+  std::unique_ptr<base::SharedMemory> shared_buf(
+      content::RenderThread::Get()->HostAllocateSharedMemoryBuffer(buf_size));
+  if (!shared_buf)
     return false;
 
-  // Copy the bits into shared memory.
-  if (!metafile.GetData(shared_buf.memory(), buf_size))
+  if (!shared_buf->Map(buf_size))
     return false;
 
-  if (!shared_buf.GiveToProcess(base::GetCurrentProcessHandle(),
-                                shared_mem_handle)) {
+  if (!metafile.GetData(shared_buf->memory(), buf_size))
     return false;
-  }
 
-  Send(new PrintHostMsg_DuplicateSection(routing_id(), *shared_mem_handle,
-                                         shared_mem_handle));
+  *shared_mem_handle =
+      base::SharedMemory::DuplicateHandle(shared_buf->handle());
   return true;
 }
 

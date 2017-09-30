@@ -13,6 +13,7 @@
 #include "atom/common/native_mate_converters/image_converter.h"
 #include "atom/common/native_mate_converters/string16_converter.h"
 #include "atom/common/node_includes.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "native_mate/constructor.h"
 #include "native_mate/dictionary.h"
 #include "ui/gfx/image/image.h"
@@ -60,26 +61,29 @@ namespace atom {
 
 namespace api {
 
-Tray::Tray(v8::Isolate* isolate, mate::Handle<NativeImage> image)
+Tray::Tray(v8::Isolate* isolate, v8::Local<v8::Object> wrapper,
+           mate::Handle<NativeImage> image)
     : tray_icon_(TrayIcon::Create()) {
   SetImage(isolate, image);
   tray_icon_->AddObserver(this);
+
+  InitWith(isolate, wrapper);
 }
 
 Tray::~Tray() {
   // Destroy the native tray in next tick.
-  base::MessageLoop::current()->DeleteSoon(FROM_HERE, tray_icon_.release());
+  base::ThreadTaskRunnerHandle::Get()->DeleteSoon(
+      FROM_HERE, tray_icon_.release());
 }
 
 // static
-mate::WrappableBase* Tray::New(v8::Isolate* isolate,
-                               mate::Handle<NativeImage> image) {
+mate::WrappableBase* Tray::New(mate::Handle<NativeImage> image,
+                               mate::Arguments* args) {
   if (!Browser::Get()->is_ready()) {
-    isolate->ThrowException(v8::Exception::Error(mate::StringToV8(
-        isolate, "Cannot create Tray before app is ready")));
+    args->ThrowError("Cannot create Tray before app is ready");
     return nullptr;
   }
-  return new Tray(isolate, image);
+  return new Tray(args->isolate(), args->GetThis(), image);
 }
 
 void Tray::OnClicked(const gfx::Rect& bounds, int modifiers) {
@@ -116,6 +120,14 @@ void Tray::OnDropFiles(const std::vector<std::string>& files) {
 
 void Tray::OnDropText(const std::string& text) {
   Emit("drop-text", text);
+}
+
+void Tray::OnMouseEntered(const gfx::Point& location, int modifiers) {
+  EmitWithFlags("mouse-enter", modifiers, location);
+}
+
+void Tray::OnMouseExited(const gfx::Point& location, int modifiers) {
+  EmitWithFlags("mouse-leave", modifiers, location);
 }
 
 void Tray::OnDragEntered() {
@@ -199,8 +211,9 @@ gfx::Rect Tray::GetBounds() {
 
 // static
 void Tray::BuildPrototype(v8::Isolate* isolate,
-                          v8::Local<v8::ObjectTemplate> prototype) {
-  mate::ObjectTemplateBuilder(isolate, prototype)
+                          v8::Local<v8::FunctionTemplate> prototype) {
+  prototype->SetClassName(mate::StringToV8(isolate, "Tray"));
+  mate::ObjectTemplateBuilder(isolate, prototype->PrototypeTemplate())
       .MakeDestroyable()
       .SetMethod("setImage", &Tray::SetImage)
       .SetMethod("setPressedImage", &Tray::SetPressedImage)
@@ -220,14 +233,15 @@ void Tray::BuildPrototype(v8::Isolate* isolate,
 
 namespace {
 
+using atom::api::Tray;
+
 void Initialize(v8::Local<v8::Object> exports, v8::Local<v8::Value> unused,
                 v8::Local<v8::Context> context, void* priv) {
-  using atom::api::Tray;
   v8::Isolate* isolate = context->GetIsolate();
-  v8::Local<v8::Function> constructor = mate::CreateConstructor<Tray>(
-      isolate, "Tray", base::Bind(&Tray::New));
+  Tray::SetConstructor(isolate, base::Bind(&Tray::New));
+
   mate::Dictionary dict(isolate, exports);
-  dict.Set("Tray", static_cast<v8::Local<v8::Value>>(constructor));
+  dict.Set("Tray", Tray::GetConstructor(isolate)->GetFunction());
 }
 
 }  // namespace

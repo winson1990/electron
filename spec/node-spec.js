@@ -3,7 +3,7 @@ const ChildProcess = require('child_process')
 const fs = require('fs')
 const path = require('path')
 const os = require('os')
-const {remote} = require('electron')
+const {ipcRenderer, remote} = require('electron')
 
 const isCI = remote.getGlobal('isCi')
 
@@ -85,10 +85,72 @@ describe('node feature', function () {
         child.stdout.on('data', (chunk) => {
           data += String(chunk)
         })
-        child.on('exit', (code) => {
+        child.on('close', (code) => {
           assert.equal(code, 0)
           assert.equal(data, 'pipes stdio')
           done()
+        })
+      })
+
+      it('works when sending a message to a process forked with the --eval argument', function (done) {
+        const source = "process.on('message', (message) => { process.send(message) })"
+        const forked = ChildProcess.fork('--eval', [source])
+        forked.once('message', (message) => {
+          assert.equal(message, 'hello')
+          done()
+        })
+        forked.send('hello')
+      })
+    })
+
+    describe('child_process.spawn', function () {
+      let child
+
+      afterEach(function () {
+        if (child != null) {
+          child.kill()
+        }
+      })
+
+      it('supports spawning Electron as a node process via the ELECTRON_RUN_AS_NODE env var', function (done) {
+        child = ChildProcess.spawn(process.execPath, [path.join(__dirname, 'fixtures', 'module', 'run-as-node.js')], {
+          env: {
+            ELECTRON_RUN_AS_NODE: true
+          }
+        })
+
+        let output = ''
+        child.stdout.on('data', function (data) {
+          output += data
+        })
+        child.stdout.on('close', function () {
+          assert.deepEqual(JSON.parse(output), {
+            processLog: process.platform === 'win32' ? 'function' : 'undefined',
+            processType: 'undefined',
+            window: 'undefined'
+          })
+          done()
+        })
+      })
+
+      it('supports starting the v8 inspector with --inspect/--inspect-brk', function (done) {
+        child = ChildProcess.spawn(process.execPath, ['--inspect-brk', path.join(__dirname, 'fixtures', 'module', 'run-as-node.js')], {
+          env: {
+            ELECTRON_RUN_AS_NODE: true
+          }
+        })
+
+        let output = ''
+        child.stderr.on('data', function (data) {
+          output += data
+
+          if (output.trim().startsWith('Debugger listening on ws://')) {
+            done()
+          }
+        })
+
+        child.stdout.on('data', function (data) {
+          done(new Error(`Unexpected output: ${data.toString()}`))
         })
       })
     })
@@ -107,23 +169,36 @@ describe('node feature', function () {
       })
     })
 
-    describe('throw error in node context', function () {
-      it('gets caught', function (done) {
-        var error = new Error('boo!')
-        var lsts = process.listeners('uncaughtException')
+    describe('error thrown in renderer process node context', function () {
+      it('gets emitted as a process uncaughtException event', function (done) {
+        const error = new Error('boo!')
+        const listeners = process.listeners('uncaughtException')
         process.removeAllListeners('uncaughtException')
-        process.on('uncaughtException', function () {
-          var i, len, lst
+        process.on('uncaughtException', (thrown) => {
+          assert.strictEqual(thrown, error)
           process.removeAllListeners('uncaughtException')
-          for (i = 0, len = lsts.length; i < len; i++) {
-            lst = lsts[i]
-            process.on('uncaughtException', lst)
-          }
+          listeners.forEach((listener) => {
+            process.on('uncaughtException', listener)
+          })
           done()
         })
-        fs.readFile(__filename, function () {
+        fs.readFile(__filename, () => {
           throw error
         })
+      })
+    })
+
+    describe('error thrown in main process node context', function () {
+      it('gets emitted as a process uncaughtException event', function () {
+        const error = ipcRenderer.sendSync('handle-uncaught-exception', 'hello')
+        assert.equal(error, 'hello')
+      })
+    })
+
+    describe('promise rejection in main process node context', function () {
+      it('gets emitted as a process unhandledRejection event', function () {
+        const error = ipcRenderer.sendSync('handle-unhandled-rejection', 'hello')
+        assert.equal(error, 'hello')
       })
     })
 
@@ -221,18 +296,38 @@ describe('node feature', function () {
   })
 
   describe('process.stdout', function () {
-    it('should not throw exception', function () {
-      process.stdout
+    it('does not throw an exception when accessed', function () {
+      assert.doesNotThrow(function () {
+        process.stdout
+      })
     })
 
-    it('should not throw exception when calling write()', function () {
-      process.stdout.write('test')
+    it('does not throw an exception when calling write()', function () {
+      assert.doesNotThrow(function () {
+        process.stdout.write('test')
+      })
     })
 
-    it('should have isTTY defined', function () {
+    it('should have isTTY defined on Mac and Linux', function () {
       if (isCI) return
 
-      assert.equal(typeof process.stdout.isTTY, 'boolean')
+      if (process.platform === 'win32') {
+        assert.equal(process.stdout.isTTY, undefined)
+      } else {
+        assert.equal(typeof process.stdout.isTTY, 'boolean')
+      }
+    })
+  })
+
+  describe('process.stdin', function () {
+    it('does not throw an exception when accessed', function () {
+      assert.doesNotThrow(function () {
+        process.stdin
+      })
+    })
+
+    it('returns null when read from', function () {
+      assert.equal(process.stdin.read(), null)
     })
   })
 
@@ -246,5 +341,13 @@ describe('node feature', function () {
     it('should not crash', function () {
       require('vm').runInNewContext('')
     })
+  })
+
+  it('includes the electron version in process.versions', () => {
+    assert(/^\d+\.\d+\.\d+$/.test(process.versions.electron))
+  })
+
+  it('includes the chrome version in process.versions', () => {
+    assert(/^\d+\.\d+\.\d+\.\d+$/.test(process.versions.chrome))
   })
 })

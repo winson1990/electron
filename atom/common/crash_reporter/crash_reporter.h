@@ -10,7 +10,9 @@
 #include <utility>
 #include <vector>
 
+#include "base/files/file_path.h"
 #include "base/macros.h"
+#include "native_mate/dictionary.h"
 
 namespace crash_reporter {
 
@@ -20,16 +22,24 @@ class CrashReporter {
   typedef std::pair<int, std::string> UploadReportResult;  // upload-date, id
 
   static CrashReporter* GetInstance();
+  static void StartInstance(const mate::Dictionary& options);
 
   void Start(const std::string& product_name,
              const std::string& company_name,
              const std::string& submit_url,
-             bool auto_submit,
+             const base::FilePath& crashes_dir,
+             bool upload_to_server,
              bool skip_system_crash_handler,
              const StringMap& extra_parameters);
 
   virtual std::vector<CrashReporter::UploadReportResult> GetUploadedReports(
-      const std::string& path);
+      const base::FilePath& crashes_dir);
+
+  virtual void SetUploadToServer(bool upload_to_server);
+  virtual bool GetUploadToServer();
+  virtual void SetExtraParameter(const std::string& key,
+                                 const std::string& value);
+  virtual void RemoveExtraParameter(const std::string& key);
 
  protected:
   CrashReporter();
@@ -39,7 +49,8 @@ class CrashReporter {
                             const std::string& version,
                             const std::string& company_name,
                             const std::string& submit_url,
-                            bool auto_submit,
+                            const base::FilePath& crashes_dir,
+                            bool upload_to_server,
                             bool skip_system_crash_handler);
   virtual void SetUploadParameters();
 

@@ -4,28 +4,58 @@
 
 #include "atom/browser/atom_access_token_store.h"
 
+#include <string>
 #include <utility>
 
-#include "atom/browser/atom_browser_context.h"
 #include "atom/common/google_api_key.h"
+#include "base/environment.h"
 #include "content/public/browser/browser_thread.h"
-#include "content/public/browser/geolocation_provider.h"
+#include "device/geolocation/geolocation_provider.h"
+#include "net/url_request/url_request_context.h"
+#include "net/url_request/url_request_context_builder.h"
+#include "net/url_request/url_request_context_getter.h"
+
+using content::BrowserThread;
 
 namespace atom {
 
-namespace {
+namespace internal {
 
-// Notice that we just combined the api key with the url together here, because
-// if we use the standard {url: key} format Chromium would override our key with
-// the predefined one in common.gypi of libchromiumcontent, which is empty.
-const char* kGeolocationProviderURL =
-    "https://www.googleapis.com/geolocation/v1/geolocate?key="
-    GOOGLEAPIS_API_KEY;
+class GeoURLRequestContextGetter : public net::URLRequestContextGetter {
+ public:
+  net::URLRequestContext* GetURLRequestContext() override {
+    DCHECK_CURRENTLY_ON(BrowserThread::IO);
+    if (!url_request_context_.get()) {
+      net::URLRequestContextBuilder builder;
+      builder.set_proxy_config_service(
+          net::ProxyService::CreateSystemProxyConfigService(
+              BrowserThread::GetTaskRunnerForThread(BrowserThread::IO),
+              BrowserThread::GetTaskRunnerForThread(BrowserThread::FILE)));
+      url_request_context_ = builder.Build();
+    }
+    return url_request_context_.get();
+  }
 
-}  // namespace
+  scoped_refptr<base::SingleThreadTaskRunner> GetNetworkTaskRunner()
+      const override {
+    return BrowserThread::GetTaskRunnerForThread(BrowserThread::IO);
+  }
 
-AtomAccessTokenStore::AtomAccessTokenStore() {
-  content::GeolocationProvider::GetInstance()->UserDidOptIntoLocationServices();
+ private:
+  friend class atom::AtomAccessTokenStore;
+
+  GeoURLRequestContextGetter() {}
+  ~GeoURLRequestContextGetter() override {}
+
+  std::unique_ptr<net::URLRequestContext> url_request_context_;
+  DISALLOW_COPY_AND_ASSIGN(GeoURLRequestContextGetter);
+};
+
+}  // namespace internal
+
+AtomAccessTokenStore::AtomAccessTokenStore()
+    : request_context_getter_(new internal::GeoURLRequestContextGetter) {
+  device::GeolocationProvider::GetInstance()->UserDidOptIntoLocationServices();
 }
 
 AtomAccessTokenStore::~AtomAccessTokenStore() {
@@ -33,35 +63,23 @@ AtomAccessTokenStore::~AtomAccessTokenStore() {
 
 void AtomAccessTokenStore::LoadAccessTokens(
     const LoadAccessTokensCallback& callback) {
-  content::BrowserThread::PostTaskAndReply(
-      content::BrowserThread::UI,
-      FROM_HERE,
-      base::Bind(&AtomAccessTokenStore::GetRequestContextOnUIThread, this),
-      base::Bind(&AtomAccessTokenStore::RespondOnOriginatingThread,
-                 this, callback));
+  std::unique_ptr<base::Environment> env(base::Environment::Create());
+  std::string api_key;
+  if (!env->GetVar("GOOGLE_API_KEY", &api_key))
+    api_key = GOOGLEAPIS_API_KEY;
+  // Equivalent to access_token_map[kGeolocationProviderURL].
+  // Somehow base::string16 is causing compilation errors when used in a pair
+  // of std::map on Linux, this can work around it.
+  device::AccessTokenStore::AccessTokenMap access_token_map;
+  std::pair<GURL, base::string16> token_pair;
+  token_pair.first = GURL(GOOGLEAPIS_ENDPOINT + api_key);
+  access_token_map.insert(token_pair);
+
+  callback.Run(access_token_map, request_context_getter_.get());
 }
 
 void AtomAccessTokenStore::SaveAccessToken(const GURL& server_url,
                                            const base::string16& access_token) {
-}
-
-void AtomAccessTokenStore::GetRequestContextOnUIThread() {
-  auto browser_context = AtomBrowserContext::From("", false);
-  request_context_getter_ = browser_context->GetRequestContext();
-}
-
-void AtomAccessTokenStore::RespondOnOriginatingThread(
-    const LoadAccessTokensCallback& callback) {
-  // Equivelent to access_token_map[kGeolocationProviderURL].
-  // Somehow base::string16 is causing compilation errors when used in a pair
-  // of std::map on Linux, this can work around it.
-  AccessTokenMap access_token_map;
-  std::pair<GURL, base::string16> token_pair;
-  token_pair.first = GURL(kGeolocationProviderURL);
-  access_token_map.insert(token_pair);
-
-  callback.Run(access_token_map, request_context_getter_.get());
-  request_context_getter_ = nullptr;
 }
 
 }  // namespace atom

@@ -28,7 +28,7 @@ class Screen : public mate::EventEmitter<Screen>,
   static v8::Local<v8::Value> Create(v8::Isolate* isolate);
 
   static void BuildPrototype(v8::Isolate* isolate,
-                             v8::Local<v8::ObjectTemplate> prototype);
+                             v8::Local<v8::FunctionTemplate> prototype);
 
  protected:
   Screen(v8::Isolate* isolate, display::Screen* screen);
@@ -39,6 +39,10 @@ class Screen : public mate::EventEmitter<Screen>,
   std::vector<display::Display> GetAllDisplays();
   display::Display GetDisplayNearestPoint(const gfx::Point& point);
   display::Display GetDisplayMatching(const gfx::Rect& match_rect);
+
+#if defined(OS_MACOSX)
+  int getMenuBarHeight();
+#endif
 
   // display::DisplayObserver:
   void OnDisplayAdded(const display::Display& new_display) override;

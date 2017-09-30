@@ -17,6 +17,7 @@
 #include "chrome/common/chrome_paths_internal.h"
 #include "chrome/common/widevine_cdm_constants.h"
 #include "third_party/widevine/cdm/stub/widevine_cdm_version.h"
+#include "third_party/widevine/cdm/widevine_cdm_common.h"
 
 #if defined(OS_ANDROID)
 #include "base/android/path_utils.h"
@@ -67,7 +68,7 @@ const base::FilePath::CharType kComponentUpdatedFlashHint[] =
     FILE_PATH_LITERAL("latest-component-updated-flash");
 #endif  // defined(OS_LINUX)
 
-static base::LazyInstance<base::FilePath>
+static base::LazyInstance<base::FilePath>::DestructorAtExit
     g_invalid_specified_user_data_dir = LAZY_INSTANCE_INITIALIZER;
 
 // Gets the path for internal plugins.
@@ -359,12 +360,12 @@ bool PathProvider(int key, base::FilePath* result) {
 #endif
       cur = cur.Append(FILE_PATH_LITERAL("pnacl"));
       break;
-#if defined(WIDEVINE_CDM_AVAILABLE) && defined(ENABLE_PEPPER_CDMS)
+#if defined(WIDEVINE_CDM_AVAILABLE) && BUILDFLAG(ENABLE_PEPPER_CDMS)
 #if defined(WIDEVINE_CDM_IS_COMPONENT)
     case chrome::DIR_COMPONENT_WIDEVINE_CDM:
       if (!PathService::Get(chrome::DIR_USER_DATA, &cur))
         return false;
-      cur = cur.Append(kWidevineCdmBaseDirectory);
+      cur = cur.AppendASCII(kWidevineCdmBaseDirectory);
       break;
 #endif  // defined(WIDEVINE_CDM_IS_COMPONENT)
     // TODO(xhwang): FILE_WIDEVINE_CDM_ADAPTER has different meanings.
@@ -375,7 +376,7 @@ bool PathProvider(int key, base::FilePath* result) {
         return false;
       cur = cur.AppendASCII(kWidevineCdmAdapterFileName);
       break;
-#endif  // defined(WIDEVINE_CDM_AVAILABLE) && defined(ENABLE_PEPPER_CDMS)
+#endif  // defined(WIDEVINE_CDM_AVAILABLE) && BUILDFLAG(ENABLE_PEPPER_CDMS)
     case chrome::FILE_RESOURCES_PACK:
 #if defined(OS_MACOSX) && !defined(OS_IOS)
       if (base::mac::AmIBundled()) {

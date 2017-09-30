@@ -1,6 +1,6 @@
 const assert = require('assert')
-const autoUpdater = require('electron').remote.autoUpdater
-const ipcRenderer = require('electron').ipcRenderer
+const {autoUpdater} = require('electron').remote
+const {ipcRenderer} = require('electron')
 
 // Skip autoUpdater tests in MAS build.
 if (!process.mas) {
@@ -48,6 +48,40 @@ if (!process.mas) {
         autoUpdater.setFeedURL(updateURL)
         assert.equal(autoUpdater.getFeedURL(), updateURL)
         done()
+      })
+    })
+
+    describe('quitAndInstall', function () {
+      it('emits an error on Windows when no update is available', function (done) {
+        if (process.platform !== 'win32') {
+          return done()
+        }
+
+        ipcRenderer.once('auto-updater-error', function (event, message) {
+          assert.equal(message, 'No update available, can\'t quit and install')
+          done()
+        })
+        autoUpdater.quitAndInstall()
+      })
+    })
+
+    describe('error event', function () {
+      it('serializes correctly over the remote module', function (done) {
+        if (process.platform === 'linux') {
+          return done()
+        }
+
+        autoUpdater.once('error', function (error) {
+          assert.equal(error instanceof Error, true)
+          assert.deepEqual(Object.getOwnPropertyNames(error), ['stack', 'message', 'name'])
+          done()
+        })
+
+        autoUpdater.setFeedURL('')
+
+        if (process.platform === 'win32') {
+          autoUpdater.checkForUpdates()
+        }
       })
     })
   })

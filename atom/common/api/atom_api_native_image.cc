@@ -11,19 +11,20 @@
 #include "atom/common/native_mate_converters/file_path_converter.h"
 #include "atom/common/native_mate_converters/gfx_converter.h"
 #include "atom/common/native_mate_converters/gurl_converter.h"
-#include "atom/common/node_includes.h"
-#include "base/base64.h"
+#include "atom/common/native_mate_converters/value_converter.h"
 #include "base/files/file_util.h"
-#include "base/strings/string_util.h"
 #include "base/strings/pattern.h"
-#include "native_mate/dictionary.h"
+#include "base/strings/string_util.h"
 #include "native_mate/object_template_builder.h"
 #include "net/base/data_url.h"
+#include "third_party/skia/include/core/SkPixelRef.h"
 #include "ui/base/layout.h"
+#include "ui/base/webui/web_ui_util.h"
 #include "ui/gfx/codec/jpeg_codec.h"
 #include "ui/gfx/codec/png_codec.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/image/image_skia.h"
+#include "ui/gfx/image/image_skia_operations.h"
 #include "ui/gfx/image/image_util.h"
 
 #if defined(OS_WIN)
@@ -31,6 +32,8 @@
 #include "base/win/scoped_gdi_object.h"
 #include "ui/gfx/icon_util.h"
 #endif
+
+#include "atom/common/node_includes.h"
 
 namespace atom {
 
@@ -72,9 +75,20 @@ float GetScaleFactorFromPath(const base::FilePath& path) {
   return 1.0f;
 }
 
+// Get the scale factor from options object at the first argument
+float GetScaleFactorFromOptions(mate::Arguments* args) {
+  float scale_factor = 1.0f;
+  mate::Dictionary options;
+  if (args->GetNext(&options))
+    options.Get("scaleFactor", &scale_factor);
+  return scale_factor;
+}
+
 bool AddImageSkiaRep(gfx::ImageSkia* image,
                      const unsigned char* data,
                      size_t size,
+                     int width,
+                     int height,
                      double scale_factor) {
   std::unique_ptr<SkBitmap> decoded(new SkBitmap());
 
@@ -83,8 +97,17 @@ bool AddImageSkiaRep(gfx::ImageSkia* image,
     // Try JPEG.
     decoded = gfx::JPEGCodec::Decode(data, size);
 
-  if (!decoded)
-    return false;
+  if (!decoded) {
+    // Try Bitmap
+    if (width > 0 && height > 0) {
+      decoded.reset(new SkBitmap);
+      decoded->allocN32Pixels(width, height, false);
+      decoded->setPixels(
+        const_cast<void*>(reinterpret_cast<const void*>(data)));
+    } else {
+      return false;
+    }
+  }
 
   image->AddRepresentation(gfx::ImageSkiaRep(*decoded, scale_factor));
   return true;
@@ -100,7 +123,7 @@ bool AddImageSkiaRep(gfx::ImageSkia* image,
   const unsigned char* data =
       reinterpret_cast<const unsigned char*>(file_contents.data());
   size_t size = file_contents.size();
-  return AddImageSkiaRep(image, data, size, scale_factor);
+  return AddImageSkiaRep(image, data, size, 0, 0, scale_factor);
 }
 
 bool PopulateImageSkiaRepsFromPath(gfx::ImageSkia* image,
@@ -171,11 +194,19 @@ bool ReadImageSkiaFromICO(gfx::ImageSkia* image, HICON icon) {
 }
 #endif
 
+void Noop(char*, void*) {
+}
+
 }  // namespace
 
 NativeImage::NativeImage(v8::Isolate* isolate, const gfx::Image& image)
     : image_(image) {
   Init(isolate);
+  if (image_.HasRepresentation(gfx::Image::kImageRepSkia)) {
+    isolate->AdjustAmountOfExternalAllocatedMemory(
+      image_.ToImageSkia()->bitmap()->computeSize64());
+  }
+  MarkHighMemoryUsage();
 }
 
 #if defined(OS_WIN)
@@ -186,10 +217,20 @@ NativeImage::NativeImage(v8::Isolate* isolate, const base::FilePath& hicon_path)
   ReadImageSkiaFromICO(&image_skia, GetHICON(256));
   image_ = gfx::Image(image_skia);
   Init(isolate);
+  if (image_.HasRepresentation(gfx::Image::kImageRepSkia)) {
+    isolate->AdjustAmountOfExternalAllocatedMemory(
+      image_.ToImageSkia()->bitmap()->computeSize64());
+  }
+  MarkHighMemoryUsage();
 }
 #endif
 
-NativeImage::~NativeImage() {}
+NativeImage::~NativeImage() {
+  if (image_.HasRepresentation(gfx::Image::kImageRepSkia)) {
+    isolate()->AdjustAmountOfExternalAllocatedMemory(
+      - image_.ToImageSkia()->bitmap()->computeSize64());
+  }
+}
 
 #if defined(OS_WIN)
 HICON NativeImage::GetHICON(int size) {
@@ -212,34 +253,86 @@ HICON NativeImage::GetHICON(int size) {
 }
 #endif
 
-v8::Local<v8::Value> NativeImage::ToPNG(v8::Isolate* isolate) {
-  scoped_refptr<base::RefCountedMemory> png = image_.As1xPNGBytes();
-  return node::Buffer::Copy(isolate,
-                            reinterpret_cast<const char*>(png->front()),
-                            static_cast<size_t>(png->size())).ToLocalChecked();
+v8::Local<v8::Value> NativeImage::ToPNG(mate::Arguments* args) {
+  float scale_factor = GetScaleFactorFromOptions(args);
+
+  if (scale_factor == 1.0f) {
+    // Use raw 1x PNG bytes when available
+    scoped_refptr<base::RefCountedMemory> png = image_.As1xPNGBytes();
+    if (png->size() > 0) {
+      const char* data = reinterpret_cast<const char*>(png->front());
+      size_t size = png->size();
+      return node::Buffer::Copy(args->isolate(), data, size).ToLocalChecked();
+    }
+  }
+
+  const SkBitmap bitmap =
+      image_.AsImageSkia().GetRepresentation(scale_factor).sk_bitmap();
+  std::vector<unsigned char> encoded;
+  gfx::PNGCodec::EncodeBGRASkBitmap(bitmap, false, &encoded);
+  const char* data = reinterpret_cast<char*>(encoded.data());
+  size_t size = encoded.size();
+  return node::Buffer::Copy(args->isolate(), data, size).ToLocalChecked();
+}
+
+v8::Local<v8::Value> NativeImage::ToBitmap(mate::Arguments* args) {
+  float scale_factor = GetScaleFactorFromOptions(args);
+
+  const SkBitmap bitmap =
+      image_.AsImageSkia().GetRepresentation(scale_factor).sk_bitmap();
+  SkPixelRef* ref = bitmap.pixelRef();
+  if (!ref)
+    return node::Buffer::New(args->isolate(), 0).ToLocalChecked();
+  return node::Buffer::Copy(args->isolate(),
+                            reinterpret_cast<const char*>(ref->pixels()),
+                            bitmap.getSafeSize()).ToLocalChecked();
 }
 
 v8::Local<v8::Value> NativeImage::ToJPEG(v8::Isolate* isolate, int quality) {
   std::vector<unsigned char> output;
   gfx::JPEG1xEncodedDataFromImage(image_, quality, &output);
+  if (output.empty())
+    return node::Buffer::New(isolate, 0).ToLocalChecked();
   return node::Buffer::Copy(
       isolate,
       reinterpret_cast<const char*>(&output.front()),
-      static_cast<size_t>(output.size())).ToLocalChecked();
+      output.size()).ToLocalChecked();
 }
 
-std::string NativeImage::ToDataURL() {
-  scoped_refptr<base::RefCountedMemory> png = image_.As1xPNGBytes();
-  std::string data_url;
-  data_url.insert(data_url.end(), png->front(), png->front() + png->size());
-  base::Base64Encode(data_url, &data_url);
-  data_url.insert(0, "data:image/png;base64,");
-  return data_url;
+std::string NativeImage::ToDataURL(mate::Arguments* args) {
+  float scale_factor = GetScaleFactorFromOptions(args);
+
+  if (scale_factor == 1.0f) {
+    // Use raw 1x PNG bytes when available
+    scoped_refptr<base::RefCountedMemory> png = image_.As1xPNGBytes();
+    if (png->size() > 0)
+      return webui::GetPngDataUrl(png->front(), png->size());
+  }
+
+  return webui::GetBitmapDataUrl(
+      image_.AsImageSkia().GetRepresentation(scale_factor).sk_bitmap());
+}
+
+v8::Local<v8::Value> NativeImage::GetBitmap(mate::Arguments* args) {
+  float scale_factor = GetScaleFactorFromOptions(args);
+
+  const SkBitmap bitmap =
+      image_.AsImageSkia().GetRepresentation(scale_factor).sk_bitmap();
+  SkPixelRef* ref = bitmap.pixelRef();
+  if (!ref)
+    return node::Buffer::New(args->isolate(), 0).ToLocalChecked();
+  return node::Buffer::New(args->isolate(),
+                           reinterpret_cast<char*>(ref->pixels()),
+                           bitmap.getSafeSize(),
+                           &Noop,
+                           nullptr).ToLocalChecked();
 }
 
 v8::Local<v8::Value> NativeImage::GetNativeHandle(v8::Isolate* isolate,
                                                   mate::Arguments* args) {
 #if defined(OS_MACOSX)
+  if (IsEmpty()) return node::Buffer::New(isolate, 0).ToLocalChecked();
+
   NSImage* ptr = image_.AsNSImage();
   return node::Buffer::Copy(
       isolate,
@@ -257,6 +350,97 @@ bool NativeImage::IsEmpty() {
 
 gfx::Size NativeImage::GetSize() {
   return image_.Size();
+}
+
+float NativeImage::GetAspectRatio() {
+  gfx::Size size = GetSize();
+  if (size.IsEmpty())
+    return 1.f;
+  else
+    return static_cast<float>(size.width()) / static_cast<float>(size.height());
+}
+
+mate::Handle<NativeImage> NativeImage::Resize(
+    v8::Isolate* isolate, const base::DictionaryValue& options) {
+  gfx::Size size = GetSize();
+  int width = size.width();
+  int height = size.height();
+  bool width_set = options.GetInteger("width", &width);
+  bool height_set = options.GetInteger("height", &height);
+  size.SetSize(width, height);
+
+  if (width_set && !height_set) {
+    // Scale height to preserve original aspect ratio
+    size.set_height(width);
+    size = gfx::ScaleToRoundedSize(size, 1.f, 1.f / GetAspectRatio());
+  } else if (height_set && !width_set) {
+    // Scale width to preserve original aspect ratio
+    size.set_width(height);
+    size = gfx::ScaleToRoundedSize(size, GetAspectRatio(), 1.f);
+  }
+
+  skia::ImageOperations::ResizeMethod method =
+      skia::ImageOperations::ResizeMethod::RESIZE_BEST;
+  std::string quality;
+  options.GetString("quality", &quality);
+  if (quality == "good")
+    method = skia::ImageOperations::ResizeMethod::RESIZE_GOOD;
+  else if (quality == "better")
+    method = skia::ImageOperations::ResizeMethod::RESIZE_BETTER;
+
+  gfx::ImageSkia resized = gfx::ImageSkiaOperations::CreateResizedImage(
+      image_.AsImageSkia(), method, size);
+  return mate::CreateHandle(isolate,
+                            new NativeImage(isolate, gfx::Image(resized)));
+}
+
+mate::Handle<NativeImage> NativeImage::Crop(v8::Isolate* isolate,
+                                            const gfx::Rect& rect) {
+  gfx::ImageSkia cropped = gfx::ImageSkiaOperations::ExtractSubset(
+      image_.AsImageSkia(), rect);
+  return mate::CreateHandle(isolate,
+                            new NativeImage(isolate, gfx::Image(cropped)));
+}
+
+void NativeImage::AddRepresentation(const mate::Dictionary& options) {
+  int width = 0;
+  int height = 0;
+  float scale_factor = 1.0f;
+  options.Get("width", &width);
+  options.Get("height", &height);
+  options.Get("scaleFactor", &scale_factor);
+
+  bool skia_rep_added = false;
+  gfx::ImageSkia image_skia = image_.AsImageSkia();
+
+  v8::Local<v8::Value> buffer;
+  GURL url;
+  if (options.Get("buffer", &buffer) && node::Buffer::HasInstance(buffer)) {
+    AddImageSkiaRep(
+        &image_skia,
+        reinterpret_cast<unsigned char*>(node::Buffer::Data(buffer)),
+        node::Buffer::Length(buffer),
+        width, height, scale_factor);
+    skia_rep_added = true;
+  } else if (options.Get("dataURL", &url)) {
+    std::string mime_type, charset, data;
+    if (net::DataURL::Parse(url, &mime_type, &charset, &data)) {
+      if (mime_type == "image/png" || mime_type == "image/jpeg") {
+        AddImageSkiaRep(
+            &image_skia,
+            reinterpret_cast<const unsigned char*>(data.c_str()),
+            data.size(),
+            width, height, scale_factor);
+        skia_rep_added = true;
+      }
+    }
+  }
+
+  // Re-initialize image when first representation is added to an empty image
+  if (skia_rep_added && IsEmpty()) {
+    gfx::Image image(image_skia);
+    image_.SwapRepresentations(&image);
+  }
 }
 
 #if !defined(OS_MACOSX)
@@ -319,13 +503,26 @@ mate::Handle<NativeImage> NativeImage::CreateFromPath(
 // static
 mate::Handle<NativeImage> NativeImage::CreateFromBuffer(
     mate::Arguments* args, v8::Local<v8::Value> buffer) {
+  int width = 0;
+  int height = 0;
   double scale_factor = 1.;
-  args->GetNext(&scale_factor);
+
+  mate::Dictionary options;
+  if (args->GetNext(&options)) {
+    options.Get("width", &width);
+    options.Get("height", &height);
+    options.Get("scaleFactor", &scale_factor);
+  } else {
+    // TODO(kevinsawicki): Remove in 2.0, deprecate before then with warnings
+    args->GetNext(&scale_factor);
+  }
 
   gfx::ImageSkia image_skia;
   AddImageSkiaRep(&image_skia,
                   reinterpret_cast<unsigned char*>(node::Buffer::Data(buffer)),
                   node::Buffer::Length(buffer),
+                  width,
+                  height,
                   scale_factor);
   return Create(args->isolate(), gfx::Image(image_skia));
 }
@@ -346,16 +543,23 @@ mate::Handle<NativeImage> NativeImage::CreateFromDataURL(
 
 // static
 void NativeImage::BuildPrototype(
-    v8::Isolate* isolate, v8::Local<v8::ObjectTemplate> prototype) {
-  mate::ObjectTemplateBuilder(isolate, prototype)
+    v8::Isolate* isolate, v8::Local<v8::FunctionTemplate> prototype) {
+  prototype->SetClassName(mate::StringToV8(isolate, "NativeImage"));
+  mate::ObjectTemplateBuilder(isolate, prototype->PrototypeTemplate())
       .SetMethod("toPNG", &NativeImage::ToPNG)
       .SetMethod("toJPEG", &NativeImage::ToJPEG)
+      .SetMethod("toBitmap", &NativeImage::ToBitmap)
+      .SetMethod("getBitmap", &NativeImage::GetBitmap)
       .SetMethod("getNativeHandle", &NativeImage::GetNativeHandle)
       .SetMethod("toDataURL", &NativeImage::ToDataURL)
       .SetMethod("isEmpty", &NativeImage::IsEmpty)
       .SetMethod("getSize", &NativeImage::GetSize)
       .SetMethod("setTemplateImage", &NativeImage::SetTemplateImage)
       .SetMethod("isTemplateImage", &NativeImage::IsTemplateImage)
+      .SetMethod("resize", &NativeImage::Resize)
+      .SetMethod("crop", &NativeImage::Crop)
+      .SetMethod("getAspectRatio", &NativeImage::GetAspectRatio)
+      .SetMethod("addRepresentation", &NativeImage::AddRepresentation)
       // TODO(kevinsawicki): Remove in 2.0, deprecate before then with warnings
       .SetMethod("toPng", &NativeImage::ToPNG)
       .SetMethod("toJpeg", &NativeImage::ToJPEG);

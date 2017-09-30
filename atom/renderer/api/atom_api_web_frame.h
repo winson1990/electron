@@ -11,7 +11,7 @@
 #include "atom/renderer/guest_view_container.h"
 #include "native_mate/handle.h"
 #include "native_mate/wrappable.h"
-#include "third_party/WebKit/public/web/WebCache.h"
+#include "third_party/WebKit/public/platform/WebCache.h"
 
 namespace blink {
 class WebLocalFrame;
@@ -32,7 +32,7 @@ class WebFrame : public mate::Wrappable<WebFrame> {
   static mate::Handle<WebFrame> Create(v8::Isolate* isolate);
 
   static void BuildPrototype(v8::Isolate* isolate,
-                             v8::Local<v8::ObjectTemplate> prototype);
+                             v8::Local<v8::FunctionTemplate> prototype);
 
  private:
   explicit WebFrame(v8::Isolate* isolate);
@@ -45,7 +45,8 @@ class WebFrame : public mate::Wrappable<WebFrame> {
   double SetZoomFactor(double factor);
   double GetZoomFactor() const;
 
-  void SetZoomLevelLimits(double min_level, double max_level);
+  void SetVisualZoomLevelLimits(double min_level, double max_level);
+  void SetLayoutZoomLevelLimits(double min_level, double max_level);
 
   v8::Local<v8::Value> RegisterEmbedderCustomElement(
       const base::string16& name, v8::Local<v8::Object> options);
@@ -53,6 +54,7 @@ class WebFrame : public mate::Wrappable<WebFrame> {
       int element_instance_id,
       const GuestViewContainer::ResizeCallback& callback);
   void AttachGuest(int element_instance_id);
+  void DetachGuest(int element_instance_id);
 
   // Set the provider that will be used by SpellCheckClient for spell check.
   void SetSpellCheckProvider(mate::Arguments* args,
@@ -62,10 +64,12 @@ class WebFrame : public mate::Wrappable<WebFrame> {
 
   void RegisterURLSchemeAsSecure(const std::string& scheme);
   void RegisterURLSchemeAsBypassingCSP(const std::string& scheme);
-  void RegisterURLSchemeAsPrivileged(const std::string& scheme);
+  void RegisterURLSchemeAsPrivileged(const std::string& scheme,
+                                     mate::Arguments* args);
 
   // Editing.
   void InsertText(const std::string& text);
+  void InsertCSS(const std::string& css);
 
   // Excecuting scripts.
   void ExecuteJavaScript(const base::string16& code, mate::Arguments* args);

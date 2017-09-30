@@ -7,6 +7,7 @@
 
 #include "base/callback.h"
 #include "content/public/renderer/browser_plugin_delegate.h"
+#include "content/public/renderer/render_frame.h"
 
 namespace gfx {
 class Size;
@@ -32,7 +33,6 @@ class GuestViewContainer : public content::BrowserPluginDelegate {
 
  private:
   int element_instance_id_;
-  content::RenderFrame* render_frame_;
 
   ResizeCallback element_resize_callback_;
 

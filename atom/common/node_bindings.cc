@@ -11,19 +11,19 @@
 #include "atom/common/api/locker.h"
 #include "atom/common/atom_command_line.h"
 #include "atom/common/native_mate_converters/file_path_converter.h"
-#include "base/command_line.h"
 #include "base/base_paths.h"
+#include "base/command_line.h"
 #include "base/environment.h"
 #include "base/files/file_path.h"
-#include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
+#include "base/run_loop.h"
+#include "base/threading/thread_task_runner_handle.h"
+#include "base/trace_event/trace_event.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/common/content_paths.h"
 #include "native_mate/dictionary.h"
 
 #include "atom/common/node_includes.h"
-
-using content::BrowserThread;
 
 // Force all builtin modules to be referenced so they can actually run their
 // DSO constructors, see http://git.io/DRIqCg.
@@ -33,16 +33,18 @@ using content::BrowserThread;
 // Electron's builtin modules.
 REFERENCE_MODULE(atom_browser_app);
 REFERENCE_MODULE(atom_browser_auto_updater);
+REFERENCE_MODULE(atom_browser_browser_view);
 REFERENCE_MODULE(atom_browser_content_tracing);
-REFERENCE_MODULE(atom_browser_dialog);
 REFERENCE_MODULE(atom_browser_debugger);
 REFERENCE_MODULE(atom_browser_desktop_capturer);
+REFERENCE_MODULE(atom_browser_dialog);
 REFERENCE_MODULE(atom_browser_download_item);
+REFERENCE_MODULE(atom_browser_global_shortcut);
 REFERENCE_MODULE(atom_browser_menu);
+REFERENCE_MODULE(atom_browser_net);
 REFERENCE_MODULE(atom_browser_power_monitor);
 REFERENCE_MODULE(atom_browser_power_save_blocker);
 REFERENCE_MODULE(atom_browser_protocol);
-REFERENCE_MODULE(atom_browser_global_shortcut);
 REFERENCE_MODULE(atom_browser_render_process_preferences);
 REFERENCE_MODULE(atom_browser_session);
 REFERENCE_MODULE(atom_browser_system_preferences);
@@ -54,6 +56,7 @@ REFERENCE_MODULE(atom_common_asar);
 REFERENCE_MODULE(atom_common_clipboard);
 REFERENCE_MODULE(atom_common_crash_reporter);
 REFERENCE_MODULE(atom_common_native_image);
+REFERENCE_MODULE(atom_common_notification);
 REFERENCE_MODULE(atom_common_screen);
 REFERENCE_MODULE(atom_common_shell);
 REFERENCE_MODULE(atom_common_v8_util);
@@ -61,21 +64,9 @@ REFERENCE_MODULE(atom_renderer_ipc);
 REFERENCE_MODULE(atom_renderer_web_frame);
 #undef REFERENCE_MODULE
 
-// The "v8::Function::kLineOffsetNotFound" is exported in node.dll, but the
-// linker can not find it, could be a bug of VS.
-#if defined(OS_WIN) && !defined(DEBUG)
-namespace v8 {
-const int Function::kLineOffsetNotFound = -1;
-}
-#endif
-
 namespace atom {
 
 namespace {
-
-// Empty callback for async handle.
-void UvNoOp(uv_async_t* handle) {
-}
 
 // Convert the given vector to an array of C-strings. The strings in the
 // returned vector are only guaranteed valid so long as the vector of strings
@@ -107,10 +98,9 @@ base::FilePath GetResourcesPath(bool is_browser) {
 
 }  // namespace
 
-NodeBindings::NodeBindings(bool is_browser)
-    : is_browser_(is_browser),
-      message_loop_(nullptr),
-      uv_loop_(uv_default_loop()),
+NodeBindings::NodeBindings(BrowserEnvironment browser_env)
+    : browser_env_(browser_env),
+      uv_loop_(browser_env == WORKER ? uv_loop_new() : uv_default_loop()),
       embed_closed_(false),
       uv_env_(nullptr),
       weak_factory_(this) {
@@ -127,16 +117,21 @@ NodeBindings::~NodeBindings() {
 
   // Clear uv.
   uv_sem_destroy(&embed_sem_);
+  uv_close(reinterpret_cast<uv_handle_t*>(&dummy_uv_handle_), nullptr);
+
+  // Destroy loop.
+  if (uv_loop_ != uv_default_loop())
+    uv_loop_delete(uv_loop_);
 }
 
 void NodeBindings::Initialize() {
   // Open node's error reporting system for browser process.
-  node::g_standalone_mode = is_browser_;
+  node::g_standalone_mode = browser_env_ == BROWSER;
   node::g_upstream_node_mode = false;
 
 #if defined(OS_LINUX)
   // Get real command line in renderer process forked by zygote.
-  if (!is_browser_)
+  if (browser_env_ != BROWSER)
     AtomCommandLine::InitializeFromCommandLine();
 #endif
 
@@ -148,8 +143,8 @@ void NodeBindings::Initialize() {
   // uv_init overrides error mode to suppress the default crash dialog, bring
   // it back if user wants to show it.
   std::unique_ptr<base::Environment> env(base::Environment::Create());
-  if (env->HasVar("ELECTRON_DEFAULT_ERROR_MODE"))
-    SetErrorMode(0);
+  if (browser_env_ == BROWSER || env->HasVar("ELECTRON_DEFAULT_ERROR_MODE"))
+    SetErrorMode(GetErrorMode() & ~SEM_NOGPFAULTERRORBOX);
 #endif
 }
 
@@ -158,9 +153,19 @@ node::Environment* NodeBindings::CreateEnvironment(
   auto args = AtomCommandLine::argv();
 
   // Feed node the path to initialization script.
-  base::FilePath::StringType process_type = is_browser_ ?
-      FILE_PATH_LITERAL("browser") : FILE_PATH_LITERAL("renderer");
-  base::FilePath resources_path = GetResourcesPath(is_browser_);
+  base::FilePath::StringType process_type;
+  switch (browser_env_) {
+    case BROWSER:
+      process_type = FILE_PATH_LITERAL("browser");
+      break;
+    case RENDERER:
+      process_type = FILE_PATH_LITERAL("renderer");
+      break;
+    case WORKER:
+      process_type = FILE_PATH_LITERAL("worker");
+      break;
+  }
+  base::FilePath resources_path = GetResourcesPath(browser_env_ == BROWSER);
   base::FilePath script_path =
       resources_path.Append(FILE_PATH_LITERAL("electron.asar"))
                     .Append(process_type)
@@ -170,19 +175,30 @@ node::Environment* NodeBindings::CreateEnvironment(
 
   std::unique_ptr<const char*[]> c_argv = StringVectorToArgArray(args);
   node::Environment* env = node::CreateEnvironment(
-      context->GetIsolate(), uv_default_loop(), context,
+      new node::IsolateData(context->GetIsolate(), uv_loop_), context,
       args.size(), c_argv.get(), 0, nullptr);
+
+  if (browser_env_ == BROWSER) {
+    // SetAutorunMicrotasks is no longer called in node::CreateEnvironment
+    // so instead call it here to match expected node behavior
+    context->GetIsolate()->SetMicrotasksPolicy(v8::MicrotasksPolicy::kExplicit);
+  } else {
+    // Node uses the deprecated SetAutorunMicrotasks(false) mode, we should
+    // switch to use the scoped policy to match blink's behavior.
+    context->GetIsolate()->SetMicrotasksPolicy(v8::MicrotasksPolicy::kScoped);
+  }
 
   mate::Dictionary process(context->GetIsolate(), env->process_object());
   process.Set("type", process_type);
   process.Set("resourcesPath", resources_path);
   // Do not set DOM globals for renderer process.
-  if (!is_browser_)
+  if (browser_env_ != BROWSER)
     process.Set("_noBrowserGlobals", resources_path);
   // The path to helper app.
   base::FilePath helper_exec_path;
   PathService::Get(content::CHILD_PROCESS_EXE, &helper_exec_path);
   process.Set("helperExecPath", helper_exec_path);
+
   return env;
 }
 
@@ -192,11 +208,9 @@ void NodeBindings::LoadEnvironment(node::Environment* env) {
 }
 
 void NodeBindings::PrepareMessageLoop() {
-  DCHECK(!is_browser_ || BrowserThread::CurrentlyOn(BrowserThread::UI));
-
   // Add dummy handle for libuv, otherwise libuv would quit when there is
   // nothing to do.
-  uv_async_init(uv_loop_, &dummy_uv_handle_, UvNoOp);
+  uv_async_init(uv_loop_, &dummy_uv_handle_, nullptr);
 
   // Start worker that will interrupt main loop when having uv events.
   uv_sem_init(&embed_sem_, 0);
@@ -204,19 +218,21 @@ void NodeBindings::PrepareMessageLoop() {
 }
 
 void NodeBindings::RunMessageLoop() {
-  DCHECK(!is_browser_ || BrowserThread::CurrentlyOn(BrowserThread::UI));
-
   // The MessageLoop should have been created, remember the one in main thread.
-  message_loop_ = base::MessageLoop::current();
+  task_runner_ = base::ThreadTaskRunnerHandle::Get();
 
   // Run uv loop for once to give the uv__io_poll a chance to add all events.
   UvRunOnce();
 }
 
 void NodeBindings::UvRunOnce() {
-  DCHECK(!is_browser_ || BrowserThread::CurrentlyOn(BrowserThread::UI));
-
   node::Environment* env = uv_env();
+
+  // When doing navigation without restarting renderer process, it may happen
+  // that the node environment is destroyed but the message loop is still there.
+  // In this case we should not run uv loop.
+  if (!env)
+    return;
 
   // Use Locker in browser process.
   mate::Locker locker(env->isolate());
@@ -229,19 +245,26 @@ void NodeBindings::UvRunOnce() {
   v8::MicrotasksScope script_scope(env->isolate(),
                                    v8::MicrotasksScope::kRunMicrotasks);
 
+  if (browser_env_ != BROWSER)
+    TRACE_EVENT_BEGIN0("devtools.timeline", "FunctionCall");
+
   // Deal with uv events.
   int r = uv_run(uv_loop_, UV_RUN_NOWAIT);
-  if (r == 0 || uv_loop_->stop_flag != 0)
-    message_loop_->QuitWhenIdle();  // Quit from uv.
+
+  if (browser_env_ != BROWSER)
+    TRACE_EVENT_END0("devtools.timeline", "FunctionCall");
+
+  if (r == 0)
+    base::RunLoop().QuitWhenIdle();  // Quit from uv.
 
   // Tell the worker thread to continue polling.
   uv_sem_post(&embed_sem_);
 }
 
 void NodeBindings::WakeupMainThread() {
-  DCHECK(message_loop_);
-  message_loop_->PostTask(FROM_HERE, base::Bind(&NodeBindings::UvRunOnce,
-                                                weak_factory_.GetWeakPtr()));
+  DCHECK(task_runner_);
+  task_runner_->PostTask(FROM_HERE, base::Bind(&NodeBindings::UvRunOnce,
+                                               weak_factory_.GetWeakPtr()));
 }
 
 void NodeBindings::WakeupEmbedThread() {

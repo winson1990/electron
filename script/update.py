@@ -27,7 +27,7 @@ def main():
 def parse_args():
   parser = argparse.ArgumentParser(description='Update build configurations')
   parser.add_argument('--defines', default='',
-                      help='The definetions passed to gyp')
+                      help='The build variables passed to gyp')
   parser.add_argument('--msvs', action='store_true',
                       help='Generate Visual Studio project')
   return parser.parse_args()
@@ -63,7 +63,7 @@ def run_gyp(target_arch, component):
   if sys.platform == 'cygwin':
     # Force using win32 python on cygwin.
     python = os.path.join('vendor', 'python_26', 'python.exe')
-  gyp = os.path.join('vendor', 'brightray', 'vendor', 'gyp', 'gyp_main.py')
+  gyp = os.path.join('vendor', 'gyp', 'gyp_main.py')
   gyp_pylib = os.path.join(os.path.dirname(gyp), 'pylib')
   # Avoid using the old gyp lib in system.
   env['PYTHONPATH'] = os.path.pathsep.join([gyp_pylib,

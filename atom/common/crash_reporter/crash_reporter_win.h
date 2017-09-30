@@ -27,7 +27,8 @@ class CrashReporterWin : public CrashReporter {
                     const std::string& version,
                     const std::string& company_name,
                     const std::string& submit_url,
-                    bool auto_submit,
+                    const base::FilePath& crashes_dir,
+                    bool upload_to_server,
                     bool skip_system_crash_handler) override;
   void SetUploadParameters() override;
 
@@ -55,7 +56,8 @@ class CrashReporterWin : public CrashReporter {
   google_breakpad::CustomClientInfo* GetCustomInfo(
       const std::string& product_name,
       const std::string& version,
-      const std::string& company_name);
+      const std::string& company_name,
+      bool upload_to_server);
 
   // Custom information to be passed to crash handler.
   std::vector<google_breakpad::CustomInfoEntry> custom_info_entries_;

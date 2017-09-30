@@ -35,14 +35,15 @@ class NativeImage;
 class Tray : public mate::TrackableObject<Tray>,
              public TrayIconObserver {
  public:
-  static mate::WrappableBase* New(
-      v8::Isolate* isolate, mate::Handle<NativeImage> image);
+  static mate::WrappableBase* New(mate::Handle<NativeImage> image,
+                                  mate::Arguments* args);
 
   static void BuildPrototype(v8::Isolate* isolate,
-                             v8::Local<v8::ObjectTemplate> prototype);
+                             v8::Local<v8::FunctionTemplate> prototype);
 
  protected:
-  Tray(v8::Isolate* isolate, mate::Handle<NativeImage> image);
+  Tray(v8::Isolate* isolate, v8::Local<v8::Object> wrapper,
+       mate::Handle<NativeImage> image);
   ~Tray() override;
 
   // TrayIconObserver:
@@ -58,6 +59,8 @@ class Tray : public mate::TrackableObject<Tray>,
   void OnDragEntered() override;
   void OnDragExited() override;
   void OnDragEnded() override;
+  void OnMouseEntered(const gfx::Point& location, int modifiers) override;
+  void OnMouseExited(const gfx::Point& location, int modifiers) override;
 
   void SetImage(v8::Isolate* isolate, mate::Handle<NativeImage> image);
   void SetPressedImage(v8::Isolate* isolate, mate::Handle<NativeImage> image);

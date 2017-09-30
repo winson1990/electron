@@ -12,8 +12,11 @@
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/base/accelerators/platform_accelerator_cocoa.h"
 #include "ui/base/l10n/l10n_util_mac.h"
+#include "content/public/browser/browser_thread.h"
 #include "ui/events/cocoa/cocoa_event_utils.h"
 #include "ui/gfx/image/image.h"
+
+using content::BrowserThread;
 
 namespace {
 
@@ -35,11 +38,18 @@ Role kRolesMap[] = {
   { @selector(delete:), "delete" },
   { @selector(pasteAndMatchStyle:), "pasteandmatchstyle" },
   { @selector(selectAll:), "selectall" },
+  { @selector(startSpeaking:), "startspeaking" },
+  { @selector(stopSpeaking:), "stopspeaking" },
   { @selector(performMiniaturize:), "minimize" },
   { @selector(performClose:), "close" },
   { @selector(performZoom:), "zoom" },
   { @selector(terminate:), "quit" },
   { @selector(toggleFullScreen:), "togglefullscreen" },
+  { @selector(toggleTabBar:), "toggletabbar" },
+  { @selector(selectNextTab:), "selectnexttab" },
+  { @selector(selectPreviousTab:), "selectprevioustab" },
+  { @selector(mergeAllWindows:), "mergeallwindows" },
+  { @selector(moveTabToNewWindow:), "movetabtonewwindow" },
 };
 
 }  // namespace
@@ -65,8 +75,12 @@ Role kRolesMap[] = {
   // while its context menu is still open.
   [self cancel];
 
-  model_ = NULL;
+  model_ = nullptr;
   [super dealloc];
+}
+
+- (void)setCloseCallback:(const base::Callback<void()>&)callback {
+  closeCallback = callback;
 }
 
 - (void)populateWithModel:(atom::AtomMenuModel*)model {
@@ -88,7 +102,7 @@ Role kRolesMap[] = {
 - (void)cancel {
   if (isMenuOpen_) {
     [menu_ cancelTracking];
-    model_->MenuClosed();
+    model_->MenuWillClose();
     isMenuOpen_ = NO;
   }
 }
@@ -179,11 +193,11 @@ Role kRolesMap[] = {
 
     // Set menu item's role.
     base::string16 role = model->GetRoleAt(index);
-    if (role.empty()) {
-      [item setTarget:self];
-    } else {
+    [item setTarget:self];
+    if (!role.empty()) {
       for (const Role& pair : kRolesMap) {
         if (role == base::ASCIIToUTF16(pair.role)) {
+          [item setTarget:nil];
           [item setAction:pair.selector];
           break;
         }
@@ -263,8 +277,13 @@ Role kRolesMap[] = {
 
 - (void)menuDidClose:(NSMenu*)menu {
   if (isMenuOpen_) {
-    model_->MenuClosed();
     isMenuOpen_ = NO;
+    model_->MenuWillClose();
+
+    // Post async task so that itemSelected runs before the close callback
+    // deletes the controller from the map which deallocates it
+    if (!closeCallback.is_null())
+      BrowserThread::PostTask(BrowserThread::UI, FROM_HERE, closeCallback);
   }
 }
 

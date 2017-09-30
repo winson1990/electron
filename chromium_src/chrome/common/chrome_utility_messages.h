@@ -9,11 +9,11 @@
 #endif  // defined(OS_WIN)
 
 #include <string>
+#include <tuple>
 #include <vector>
 
 #include "base/files/file_path.h"
 #include "base/strings/string16.h"
-#include "base/tuple.h"
 #include "base/values.h"
 #include "ipc/ipc_message_macros.h"
 #include "ipc/ipc_platform_file.h"
@@ -25,9 +25,9 @@
 #define CHROME_COMMON_CHROME_UTILITY_MESSAGES_H_
 
 #if defined(OS_WIN)
-// A vector of filters, each being a Tuple containing a display string (i.e.
+// A vector of filters, each being a tuple containing a display string (i.e.
 // "Text Files") and a filter pattern (i.e. "*.txt").
-typedef std::vector<base::Tuple<base::string16, base::string16>>
+typedef std::vector<std::tuple<base::string16, base::string16>>
     GetOpenFileNameFilter;
 #endif  // OS_WIN
 
@@ -81,12 +81,6 @@ IPC_MESSAGE_CONTROL3(ChromeUtilityMsg_PatchFileCourgette,
                      base::FilePath /* input_file */,
                      base::FilePath /* patch_file */,
                      base::FilePath /* output_file */)
-
-
-// Requests the utility process to respond with a
-// ChromeUtilityHostMsg_ProcessStarted message once it has started.  This may
-// be used if the host process needs a handle to the running utility process.
-IPC_MESSAGE_CONTROL0(ChromeUtilityMsg_StartupPing)
 
 
 #if defined(OS_WIN)

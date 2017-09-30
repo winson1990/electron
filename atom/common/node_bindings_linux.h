@@ -5,14 +5,14 @@
 #ifndef ATOM_COMMON_NODE_BINDINGS_LINUX_H_
 #define ATOM_COMMON_NODE_BINDINGS_LINUX_H_
 
-#include "base/compiler_specific.h"
 #include "atom/common/node_bindings.h"
+#include "base/compiler_specific.h"
 
 namespace atom {
 
 class NodeBindingsLinux : public NodeBindings {
  public:
-  explicit NodeBindingsLinux(bool is_browser);
+  explicit NodeBindingsLinux(BrowserEnvironment browser_env);
   virtual ~NodeBindingsLinux();
 
   void RunMessageLoop() override;

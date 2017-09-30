@@ -8,7 +8,8 @@
 #include <vector>
 
 #include "base/lazy_instance.h"
-#include "base/metrics/histogram.h"
+#include "base/macros.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/strings/string_util.h"
 #include "content/public/renderer/pepper_plugin_instance.h"
 #include "content/public/renderer/render_thread.h"
@@ -96,8 +97,8 @@ enum FlashNavigateUsage {
   FLASH_NAVIGATE_USAGE_ENUM_COUNT
 };
 
-static base::LazyInstance<std::map<std::string, FlashNavigateUsage> >
-    g_rejected_headers = LAZY_INSTANCE_INITIALIZER;
+static base::LazyInstance<std::map<std::string, FlashNavigateUsage> >::
+    DestructorAtExit g_rejected_headers = LAZY_INSTANCE_INITIALIZER;
 
 bool IsSimpleHeader(const std::string& lower_case_header_name,
                     const std::string& header_value) {
@@ -205,8 +206,8 @@ int32_t PepperFlashRendererHost::OnDrawGlyphs(
     style |= SkTypeface::kBold;
   if (params.font_desc.italic)
     style |= SkTypeface::kItalic;
-  sk_sp<SkTypeface> typeface(SkTypeface::CreateFromName(
-      params.font_desc.face.c_str(), static_cast<SkTypeface::Style>(style)));
+  sk_sp<SkTypeface> typeface(SkTypeface::MakeFromName(
+      params.font_desc.face.c_str(), SkFontStyle::FromOldStyle(style)));
   if (!typeface)
     return PP_ERROR_FAILED;
 

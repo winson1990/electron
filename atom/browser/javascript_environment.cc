@@ -8,14 +8,18 @@
 
 #include "base/command_line.h"
 #include "base/message_loop/message_loop.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "content/public/common/content_switches.h"
 #include "gin/array_buffer.h"
 #include "gin/v8_initializer.h"
+
+#include "atom/common/node_includes.h"
 
 namespace atom {
 
 JavascriptEnvironment::JavascriptEnvironment()
     : initialized_(Initialize()),
+      isolate_holder_(base::ThreadTaskRunnerHandle::Get()),
       isolate_(isolate_holder_.isolate()),
       isolate_scope_(isolate_),
       locker_(isolate_),
@@ -34,11 +38,6 @@ void JavascriptEnvironment::OnMessageLoopDestroying() {
 
 bool JavascriptEnvironment::Initialize() {
   auto cmd = base::CommandLine::ForCurrentProcess();
-  if (cmd->HasSwitch("debug-brk")) {
-    // Need to be called before v8::Initialize().
-    const char expose_debug_as[] = "--expose_debug_as=v8debug";
-    v8::V8::SetFlagsFromString(expose_debug_as, sizeof(expose_debug_as) - 1);
-  }
 
   // --js-flags.
   std::string js_flags = cmd->GetSwitchValueASCII(switches::kJavaScriptFlags);
@@ -49,6 +48,13 @@ bool JavascriptEnvironment::Initialize() {
                                  gin::IsolateHolder::kStableV8Extras,
                                  gin::ArrayBufferAllocator::SharedInstance());
   return true;
+}
+
+NodeEnvironment::NodeEnvironment(node::Environment* env) : env_(env) {
+}
+
+NodeEnvironment::~NodeEnvironment() {
+  node::FreeEnvironment(env_);
 }
 
 }  // namespace atom

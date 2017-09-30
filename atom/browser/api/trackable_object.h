@@ -30,21 +30,20 @@ class TrackableObjectBase {
   // Wrap TrackableObject into a class that SupportsUserData.
   void AttachAsUserData(base::SupportsUserData* wrapped);
 
+  // Get the weak_map_id from SupportsUserData.
+  static int32_t GetIDFromWrappedClass(base::SupportsUserData* wrapped);
+
  protected:
   virtual ~TrackableObjectBase();
 
   // Returns a closure that can destroy the native class.
   base::Closure GetDestroyClosure();
 
-  // Get the weak_map_id from SupportsUserData.
-  static int32_t GetIDFromWrappedClass(base::SupportsUserData* wrapped);
-
   // Register a callback that should be destroyed before JavaScript environment
   // gets destroyed.
   static base::Closure RegisterDestructionCallback(const base::Closure& c);
 
   int32_t weak_map_id_;
-  base::SupportsUserData* wrapped_;
 
  private:
   void Destroy();
@@ -64,6 +63,12 @@ class TrackableObject : public TrackableObjectBase,
   // Mark the JS object as destroyed.
   void MarkDestroyed() {
     Wrappable<T>::GetWrapper()->SetAlignedPointerInInternalField(0, nullptr);
+  }
+
+  bool IsDestroyed() {
+    v8::Local<v8::Object> wrapper = Wrappable<T>::GetWrapper();
+    return wrapper->InternalFieldCount() == 0 ||
+           wrapper->GetAlignedPointerFromInternalField(0) == nullptr;
   }
 
   // Finds out the TrackableObject from its ID in weak map.
@@ -110,14 +115,13 @@ class TrackableObject : public TrackableObjectBase,
     RemoveFromWeakMap();
   }
 
-  void AfterInit(v8::Isolate* isolate) override {
+  void InitWith(v8::Isolate* isolate, v8::Local<v8::Object> wrapper) override {
+    WrappableBase::InitWith(isolate, wrapper);
     if (!weak_map_) {
       weak_map_ = new atom::KeyWeakMap<int32_t>;
     }
     weak_map_id_ = ++next_id_;
-    weak_map_->Set(isolate, weak_map_id_, Wrappable<T>::GetWrapper());
-    if (wrapped_)
-      AttachAsUserData(wrapped_);
+    weak_map_->Set(isolate, weak_map_id_, wrapper);
   }
 
  private:

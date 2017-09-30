@@ -8,8 +8,11 @@
 #include <map>
 #include <string>
 
+#include "base/values.h"
+#include "native_mate/dictionary.h"
 #include "native_mate/handle.h"
 #include "native_mate/wrappable.h"
+#include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/image/image.h"
 
 #if defined(OS_WIN)
@@ -52,7 +55,7 @@ class NativeImage : public mate::Wrappable<NativeImage> {
       v8::Isolate* isolate, const GURL& url);
 
   static void BuildPrototype(v8::Isolate* isolate,
-                             v8::Local<v8::ObjectTemplate> prototype);
+                             v8::Local<v8::FunctionTemplate> prototype);
 
 #if defined(OS_WIN)
   HICON GetHICON(int size);
@@ -68,14 +71,22 @@ class NativeImage : public mate::Wrappable<NativeImage> {
   ~NativeImage() override;
 
  private:
-  v8::Local<v8::Value> ToPNG(v8::Isolate* isolate);
+  v8::Local<v8::Value> ToPNG(mate::Arguments* args);
   v8::Local<v8::Value> ToJPEG(v8::Isolate* isolate, int quality);
+  v8::Local<v8::Value> ToBitmap(mate::Arguments* args);
+  v8::Local<v8::Value> GetBitmap(mate::Arguments* args);
   v8::Local<v8::Value> GetNativeHandle(
     v8::Isolate* isolate,
     mate::Arguments* args);
-  std::string ToDataURL();
+  mate::Handle<NativeImage> Resize(v8::Isolate* isolate,
+                                   const base::DictionaryValue& options);
+  mate::Handle<NativeImage> Crop(v8::Isolate* isolate,
+                                 const gfx::Rect& rect);
+  std::string ToDataURL(mate::Arguments* args);
   bool IsEmpty();
   gfx::Size GetSize();
+  float GetAspectRatio();
+  void AddRepresentation(const mate::Dictionary& options);
 
   // Mark the image as template image.
   void SetTemplateImage(bool setAsTemplate);

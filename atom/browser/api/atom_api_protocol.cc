@@ -29,6 +29,9 @@ namespace api {
 
 namespace {
 
+// List of registered custom standard schemes.
+std::vector<std::string> g_standard_schemes;
+
 // Clear protocol handlers in IO thread.
 void ClearJobFactoryInIO(
     scoped_refptr<brightray::URLRequestContextGetter> request_context_getter) {
@@ -38,6 +41,38 @@ void ClearJobFactoryInIO(
 }
 
 }  // namespace
+
+std::vector<std::string> GetStandardSchemes() {
+  return g_standard_schemes;
+}
+
+void RegisterStandardSchemes(const std::vector<std::string>& schemes,
+                             mate::Arguments* args) {
+  g_standard_schemes = schemes;
+
+  mate::Dictionary opts;
+  bool secure = false;
+  args->GetNext(&opts) && opts.Get("secure", &secure);
+
+  // Dynamically register the schemes.
+  auto* policy = content::ChildProcessSecurityPolicy::GetInstance();
+  for (const std::string& scheme : schemes) {
+    url::AddStandardScheme(scheme.c_str(), url::SCHEME_WITHOUT_PORT);
+    if (secure) {
+      url::AddSecureScheme(scheme.c_str());
+    }
+    policy->RegisterWebSafeScheme(scheme);
+  }
+
+  // Add the schemes to command line switches, so child processes can also
+  // register them.
+  base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
+      atom::switches::kStandardSchemes, base::JoinString(schemes, ","));
+  if (secure) {
+    base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
+      atom::switches::kSecureSchemes, base::JoinString(schemes, ","));
+  }
+}
 
 Protocol::Protocol(v8::Isolate* isolate, AtomBrowserContext* browser_context)
     : request_context_getter_(browser_context->GetRequestContext()),
@@ -137,8 +172,8 @@ void Protocol::OnIOCompleted(
 std::string Protocol::ErrorCodeToString(ProtocolError error) {
   switch (error) {
     case PROTOCOL_FAIL: return "Failed to manipulate protocol factory";
-    case PROTOCOL_REGISTERED: return "The scheme has been registred";
-    case PROTOCOL_NOT_REGISTERED: return "The scheme has not been registred";
+    case PROTOCOL_REGISTERED: return "The scheme has been registered";
+    case PROTOCOL_NOT_REGISTERED: return "The scheme has not been registered";
     case PROTOCOL_INTERCEPTED: return "The scheme has been intercepted";
     case PROTOCOL_NOT_INTERCEPTED: return "The scheme has not been intercepted";
     default: return "Unexpected error";
@@ -160,8 +195,9 @@ mate::Handle<Protocol> Protocol::Create(
 
 // static
 void Protocol::BuildPrototype(
-    v8::Isolate* isolate, v8::Local<v8::ObjectTemplate> prototype) {
-  mate::ObjectTemplateBuilder(isolate, prototype)
+    v8::Isolate* isolate, v8::Local<v8::FunctionTemplate> prototype) {
+  prototype->SetClassName(mate::StringToV8(isolate, "Protocol"));
+  mate::ObjectTemplateBuilder(isolate, prototype->PrototypeTemplate())
       .SetMethod("registerServiceWorkerSchemes",
                  &Protocol::RegisterServiceWorkerSchemes)
       .SetMethod("registerStringProtocol",
@@ -199,15 +235,7 @@ void RegisterStandardSchemes(
     return;
   }
 
-  auto policy = content::ChildProcessSecurityPolicy::GetInstance();
-  for (const auto& scheme : schemes) {
-    url::AddStandardScheme(scheme.c_str(), url::SCHEME_WITHOUT_PORT);
-    policy->RegisterWebSafeScheme(scheme);
-  }
-
-  auto command_line = base::CommandLine::ForCurrentProcess();
-  command_line->AppendSwitchASCII(atom::switches::kStandardSchemes,
-                                  base::JoinString(schemes, ","));
+  atom::api::RegisterStandardSchemes(schemes, args);
 }
 
 void Initialize(v8::Local<v8::Object> exports, v8::Local<v8::Value> unused,
@@ -215,6 +243,7 @@ void Initialize(v8::Local<v8::Object> exports, v8::Local<v8::Value> unused,
   v8::Isolate* isolate = context->GetIsolate();
   mate::Dictionary dict(isolate, exports);
   dict.SetMethod("registerStandardSchemes", &RegisterStandardSchemes);
+  dict.SetMethod("getStandardSchemes", &atom::api::GetStandardSchemes);
 }
 
 }  // namespace

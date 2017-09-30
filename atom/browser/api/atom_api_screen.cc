@@ -97,7 +97,7 @@ v8::Local<v8::Value> Screen::Create(v8::Isolate* isolate) {
   if (!Browser::Get()->is_ready()) {
     isolate->ThrowException(v8::Exception::Error(mate::StringToV8(
         isolate,
-        "Cannot initialize \"screen\" module before app is ready")));
+        "Cannot require \"screen\" module before app is ready")));
     return v8::Null(isolate);
   }
 
@@ -113,12 +113,16 @@ v8::Local<v8::Value> Screen::Create(v8::Isolate* isolate) {
 
 // static
 void Screen::BuildPrototype(
-    v8::Isolate* isolate, v8::Local<v8::ObjectTemplate> prototype) {
-  mate::ObjectTemplateBuilder(isolate, prototype)
+    v8::Isolate* isolate, v8::Local<v8::FunctionTemplate> prototype) {
+  prototype->SetClassName(mate::StringToV8(isolate, "Screen"));
+  mate::ObjectTemplateBuilder(isolate, prototype->PrototypeTemplate())
       .SetMethod("getCursorScreenPoint", &Screen::GetCursorScreenPoint)
       .SetMethod("getPrimaryDisplay", &Screen::GetPrimaryDisplay)
       .SetMethod("getAllDisplays", &Screen::GetAllDisplays)
       .SetMethod("getDisplayNearestPoint", &Screen::GetDisplayNearestPoint)
+#if defined(OS_MACOSX)
+      .SetMethod("getMenuBarHeight", &Screen::getMenuBarHeight)
+#endif
       .SetMethod("getDisplayMatching", &Screen::GetDisplayMatching);
 }
 
@@ -128,10 +132,14 @@ void Screen::BuildPrototype(
 
 namespace {
 
+using atom::api::Screen;
+
 void Initialize(v8::Local<v8::Object> exports, v8::Local<v8::Value> unused,
                 v8::Local<v8::Context> context, void* priv) {
-  mate::Dictionary dict(context->GetIsolate(), exports);
-  dict.Set("screen", atom::api::Screen::Create(context->GetIsolate()));
+  v8::Isolate* isolate = context->GetIsolate();
+  mate::Dictionary dict(isolate, exports);
+  dict.Set("screen", Screen::Create(isolate));
+  dict.Set("Screen", Screen::GetConstructor(isolate)->GetFunction());
 }
 
 }  // namespace

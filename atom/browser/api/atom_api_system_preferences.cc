@@ -8,10 +8,7 @@
 #include "atom/common/native_mate_converters/value_converter.h"
 #include "atom/common/node_includes.h"
 #include "native_mate/dictionary.h"
-
-#if defined(OS_WIN)
-#include "ui/base/win/shell.h"
-#endif
+#include "ui/gfx/color_utils.h"
 
 namespace atom {
 
@@ -19,22 +16,26 @@ namespace api {
 
 SystemPreferences::SystemPreferences(v8::Isolate* isolate) {
   Init(isolate);
+#if defined(OS_WIN)
+  InitializeWindow();
+#endif
 }
 
 SystemPreferences::~SystemPreferences() {
-}
-
 #if defined(OS_WIN)
-bool SystemPreferences::IsAeroGlassEnabled() {
-  return ui::win::IsAeroGlassEnabled();
-}
+  Browser::Get()->RemoveObserver(this);
 #endif
+}
 
 #if !defined(OS_MACOSX)
 bool SystemPreferences::IsDarkMode() {
   return false;
 }
 #endif
+
+bool SystemPreferences::IsInvertedColorScheme() {
+  return color_utils::IsInvertedColorScheme();
+}
 
 // static
 mate::Handle<SystemPreferences> SystemPreferences::Create(
@@ -44,11 +45,18 @@ mate::Handle<SystemPreferences> SystemPreferences::Create(
 
 // static
 void SystemPreferences::BuildPrototype(
-    v8::Isolate* isolate, v8::Local<v8::ObjectTemplate> prototype) {
-  mate::ObjectTemplateBuilder(isolate, prototype)
+    v8::Isolate* isolate, v8::Local<v8::FunctionTemplate> prototype) {
+  prototype->SetClassName(mate::StringToV8(isolate, "SystemPreferences"));
+  mate::ObjectTemplateBuilder(isolate, prototype->PrototypeTemplate())
 #if defined(OS_WIN)
+      .SetMethod("getAccentColor", &SystemPreferences::GetAccentColor)
       .SetMethod("isAeroGlassEnabled", &SystemPreferences::IsAeroGlassEnabled)
+      .SetMethod("getColor", &SystemPreferences::GetColor)
 #elif defined(OS_MACOSX)
+      .SetMethod("postNotification",
+                 &SystemPreferences::PostNotification)
+      .SetMethod("postLocalNotification",
+                 &SystemPreferences::PostLocalNotification)
       .SetMethod("subscribeNotification",
                  &SystemPreferences::SubscribeNotification)
       .SetMethod("unsubscribeNotification",
@@ -58,7 +66,12 @@ void SystemPreferences::BuildPrototype(
       .SetMethod("unsubscribeLocalNotification",
                  &SystemPreferences::UnsubscribeLocalNotification)
       .SetMethod("getUserDefault", &SystemPreferences::GetUserDefault)
+      .SetMethod("setUserDefault", &SystemPreferences::SetUserDefault)
+      .SetMethod("isSwipeTrackingFromScrollEventsEnabled",
+                 &SystemPreferences::IsSwipeTrackingFromScrollEventsEnabled)
 #endif
+      .SetMethod("isInvertedColorScheme",
+                 &SystemPreferences::IsInvertedColorScheme)
       .SetMethod("isDarkMode", &SystemPreferences::IsDarkMode);
 }
 
@@ -68,11 +81,15 @@ void SystemPreferences::BuildPrototype(
 
 namespace {
 
+using atom::api::SystemPreferences;
+
 void Initialize(v8::Local<v8::Object> exports, v8::Local<v8::Value> unused,
                 v8::Local<v8::Context> context, void* priv) {
   v8::Isolate* isolate = context->GetIsolate();
   mate::Dictionary dict(isolate, exports);
-  dict.Set("systemPreferences", atom::api::SystemPreferences::Create(isolate));
+  dict.Set("systemPreferences", SystemPreferences::Create(isolate));
+  dict.Set("SystemPreferences",
+           SystemPreferences::GetConstructor(isolate)->GetFunction());
 }
 
 }  // namespace

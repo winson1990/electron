@@ -15,9 +15,8 @@
 #include "base/files/file_util.h"
 #include "base/linux_util.h"
 #include "base/logging.h"
-#include "base/process/memory.h"
 #include "base/memory/singleton.h"
-#include "base/strings/stringprintf.h"
+#include "base/process/memory.h"
 #include "vendor/breakpad/src/client/linux/handler/exception_handler.h"
 #include "vendor/breakpad/src/common/linux/linux_libc_support.h"
 
@@ -39,7 +38,8 @@ static const off_t kMaxMinidumpFileSize = 1258291;
 
 CrashReporterLinux::CrashReporterLinux()
     : process_start_time_(0),
-      pid_(getpid()) {
+      pid_(getpid()),
+      upload_to_server_(true) {
   // Set the base process start time value.
   struct timeval tv;
   if (!gettimeofday(&tv, NULL)) {
@@ -60,33 +60,42 @@ void CrashReporterLinux::InitBreakpad(const std::string& product_name,
                                       const std::string& version,
                                       const std::string& company_name,
                                       const std::string& submit_url,
-                                      bool auto_submit,
+                                      const base::FilePath& crashes_dir,
+                                      bool upload_to_server,
                                       bool skip_system_crash_handler) {
-  EnableCrashDumping(product_name);
+  EnableCrashDumping(crashes_dir);
 
-  crash_keys_.SetKeyValue("prod", ATOM_PRODUCT_NAME);
-  crash_keys_.SetKeyValue("ver", version.c_str());
+  crash_keys_.reset(new CrashKeyStorage());
+
+  crash_keys_->SetKeyValue("prod", ATOM_PRODUCT_NAME);
+  crash_keys_->SetKeyValue("ver", version.c_str());
   upload_url_ = submit_url;
+  upload_to_server_ = upload_to_server;
 
   for (StringMap::const_iterator iter = upload_parameters_.begin();
        iter != upload_parameters_.end(); ++iter)
-    crash_keys_.SetKeyValue(iter->first.c_str(), iter->second.c_str());
+    crash_keys_->SetKeyValue(iter->first.c_str(), iter->second.c_str());
 }
 
 void CrashReporterLinux::SetUploadParameters() {
   upload_parameters_["platform"] = "linux";
 }
 
-void CrashReporterLinux::EnableCrashDumping(const std::string& product_name) {
-  std::string dump_dir = "/tmp/" + product_name + " Crashes";
-  base::FilePath dumps_path(dump_dir);
-  base::CreateDirectory(dumps_path);
+void CrashReporterLinux::SetUploadToServer(const bool upload_to_server) {
+  upload_to_server_ = upload_to_server;
+}
 
-  std::string log_file = base::StringPrintf(
-      "%s/%s", dump_dir.c_str(), "uploads.log");
+bool CrashReporterLinux::GetUploadToServer() {
+  return upload_to_server_;
+}
+
+void CrashReporterLinux::EnableCrashDumping(const base::FilePath& crashes_dir) {
+  base::CreateDirectory(crashes_dir);
+
+  std::string log_file = crashes_dir.Append("uploads.log").value();
   strncpy(g_crash_log_path, log_file.c_str(), sizeof(g_crash_log_path));
 
-  MinidumpDescriptor minidump_descriptor(dumps_path.value());
+  MinidumpDescriptor minidump_descriptor(crashes_dir.value());
   minidump_descriptor.set_size_limit(kMaxMinidumpFileSize);
 
   breakpad_.reset(new ExceptionHandler(
@@ -118,12 +127,12 @@ bool CrashReporterLinux::CrashDone(const MinidumpDescriptor& minidump,
   info.fd = minidump.fd();
   info.distro = base::g_linux_distro;
   info.distro_length = my_strlen(base::g_linux_distro);
-  info.upload = true;
+  info.upload = self->upload_to_server_;
   info.process_start_time = self->process_start_time_;
   info.oom_size = base::g_oom_size;
   info.pid = self->pid_;
   info.upload_url = self->upload_url_.c_str();
-  info.crash_keys = &self->crash_keys_;
+  info.crash_keys = self->crash_keys_.get();
   HandleCrashDump(info);
   return true;
 }

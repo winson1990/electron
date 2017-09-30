@@ -15,8 +15,15 @@ import urllib2
 import os
 import zipfile
 
-from config import is_verbose_mode
+from config import is_verbose_mode, PLATFORM
 from env_util import get_vs_env
+
+BOTO_DIR = os.path.abspath(os.path.join(__file__, '..', '..', '..', 'vendor',
+                                        'boto'))
+
+NPM = 'npm'
+if sys.platform in ['win32', 'cygwin']:
+  NPM += '.cmd'
 
 
 def get_host_arch():
@@ -167,11 +174,11 @@ def execute(argv, env=os.environ):
     raise e
 
 
-def execute_stdout(argv, env=os.environ):
+def execute_stdout(argv, env=os.environ, cwd=None):
   if is_verbose_mode():
     print ' '.join(argv)
     try:
-      subprocess.check_call(argv, env=env)
+      subprocess.check_call(argv, env=env, cwd=cwd)
     except subprocess.CalledProcessError as e:
       print e.output
       raise e
@@ -202,28 +209,33 @@ def parse_version(version):
     return vs + ['0'] * (4 - len(vs))
 
 
-def s3put(bucket, access_key, secret_key, prefix, key_prefix, files):
-  env = os.environ.copy()
-  BOTO_DIR = os.path.abspath(os.path.join(__file__, '..', '..', '..', 'vendor',
-                                          'boto'))
-  env['PYTHONPATH'] = os.path.pathsep.join([
-    env.get('PYTHONPATH', ''),
+def boto_path_dirs():
+  return [
     os.path.join(BOTO_DIR, 'build', 'lib'),
-    os.path.join(BOTO_DIR, 'build', 'lib.linux-x86_64-2.7')])
+    os.path.join(BOTO_DIR, 'build', 'lib.linux-x86_64-2.7')
+  ]
 
-  boto = os.path.join(BOTO_DIR, 'bin', 's3put')
+
+def run_boto_script(access_key, secret_key, script_name, *args):
+  env = os.environ.copy()
+  env['AWS_ACCESS_KEY_ID'] = access_key
+  env['AWS_SECRET_ACCESS_KEY'] = secret_key
+  env['PYTHONPATH'] = os.path.pathsep.join(
+      [env.get('PYTHONPATH', '')] + boto_path_dirs())
+
+  boto = os.path.join(BOTO_DIR, 'bin', script_name)
+  execute([sys.executable, boto] + list(args), env)
+
+
+def s3put(bucket, access_key, secret_key, prefix, key_prefix, files):
   args = [
-    sys.executable,
-    boto,
     '--bucket', bucket,
-    '--access_key', access_key,
-    '--secret_key', secret_key,
     '--prefix', prefix,
     '--key_prefix', key_prefix,
     '--grant', 'public-read'
   ] + files
 
-  execute(args, env)
+  run_boto_script(access_key, secret_key, 's3put', *args)
 
 
 def import_vs_env(target_arch):
@@ -236,3 +248,42 @@ def import_vs_env(target_arch):
     vs_arch = 'x86_amd64'
   env = get_vs_env('14.0', vs_arch)
   os.environ.update(env)
+
+
+def set_clang_env(env):
+  SOURCE_ROOT = os.path.abspath(os.path.join(__file__, '..', '..', '..'))
+  llvm_dir = os.path.join(SOURCE_ROOT, 'vendor', 'llvm-build',
+                          'Release+Asserts', 'bin')
+  env['CC']  = os.path.join(llvm_dir, 'clang')
+  env['CXX'] = os.path.join(llvm_dir, 'clang++')
+
+
+def update_electron_modules(dirname, target_arch, nodedir):
+  env = os.environ.copy()
+  version = get_electron_version()
+  env['npm_config_arch']    = target_arch
+  env['npm_config_target']  = version
+  env['npm_config_nodedir'] = nodedir
+  update_node_modules(dirname, env)
+  execute_stdout([NPM, 'rebuild'], env, dirname)
+
+
+def update_node_modules(dirname, env=None):
+  if env is None:
+    env = os.environ.copy()
+  if PLATFORM == 'linux':
+    # Use prebuilt clang for building native modules.
+    set_clang_env(env)
+    env['npm_config_clang'] = '1'
+  with scoped_cwd(dirname):
+    args = [NPM, 'install']
+    if is_verbose_mode():
+      args += ['--verbose']
+    # Ignore npm install errors when running in CI.
+    if os.environ.has_key('CI'):
+      try:
+        execute_stdout(args, env)
+      except subprocess.CalledProcessError:
+        pass
+    else:
+      execute_stdout(args, env)

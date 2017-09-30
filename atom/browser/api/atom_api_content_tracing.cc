@@ -7,11 +7,12 @@
 
 #include "atom/common/native_mate_converters/callback.h"
 #include "atom/common/native_mate_converters/file_path_converter.h"
-#include "atom/common/node_includes.h"
 #include "base/bind.h"
 #include "base/files/file_util.h"
 #include "content/public/browser/tracing_controller.h"
 #include "native_mate/dictionary.h"
+
+#include "atom/common/node_includes.h"
 
 using content::TracingController;
 
@@ -68,10 +69,6 @@ void Initialize(v8::Local<v8::Object> exports, v8::Local<v8::Value> unused,
   dict.SetMethod("stopRecording", &StopRecording);
   dict.SetMethod("getTraceBufferUsage", base::Bind(
       &TracingController::GetTraceBufferUsage, controller));
-  dict.SetMethod("setWatchEvent", base::Bind(
-      &TracingController::SetWatchEvent, controller));
-  dict.SetMethod("cancelWatchEvent", base::Bind(
-      &TracingController::CancelWatchEvent, controller));
 }
 
 }  // namespace

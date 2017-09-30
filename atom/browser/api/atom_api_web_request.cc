@@ -20,13 +20,14 @@ using content::BrowserThread;
 namespace mate {
 
 template<>
-struct Converter<extensions::URLPattern> {
+struct Converter<URLPattern> {
   static bool FromV8(v8::Isolate* isolate, v8::Local<v8::Value> val,
-                     extensions::URLPattern* out) {
+                     URLPattern* out) {
     std::string pattern;
     if (!ConvertFromV8(isolate, val, &pattern))
       return false;
-    return out->Parse(pattern) == extensions::URLPattern::PARSE_SUCCESS;
+    *out = URLPattern(URLPattern::SCHEME_ALL);
+    return out->Parse(pattern) == URLPattern::PARSE_SUCCESS;
   }
 };
 
@@ -88,8 +89,9 @@ mate::Handle<WebRequest> WebRequest::Create(
 
 // static
 void WebRequest::BuildPrototype(v8::Isolate* isolate,
-                                v8::Local<v8::ObjectTemplate> prototype) {
-  mate::ObjectTemplateBuilder(isolate, prototype)
+                                v8::Local<v8::FunctionTemplate> prototype) {
+  prototype->SetClassName(mate::StringToV8(isolate, "WebRequest"));
+  mate::ObjectTemplateBuilder(isolate, prototype->PrototypeTemplate())
       .SetMethod("onBeforeRequest",
                  &WebRequest::SetResponseListener<
                     AtomNetworkDelegate::kOnBeforeRequest>)

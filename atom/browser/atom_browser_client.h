@@ -6,6 +6,7 @@
 #define ATOM_BROWSER_ATOM_BROWSER_CLIENT_H_
 
 #include <map>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -49,11 +50,11 @@ class AtomBrowserClient : public brightray::BrowserClient,
   void RenderProcessWillLaunch(content::RenderProcessHost* host) override;
   content::SpeechRecognitionManagerDelegate*
       CreateSpeechRecognitionManagerDelegate() override;
-  content::AccessTokenStore* CreateAccessTokenStore() override;
   void OverrideWebkitPrefs(content::RenderViewHost* render_view_host,
                            content::WebPreferences* prefs) override;
   std::string GetApplicationLocale() override;
   void OverrideSiteInstanceForNavigation(
+      content::RenderFrameHost* render_frame_host,
       content::BrowserContext* browser_context,
       content::SiteInstance* current_instance,
       const GURL& dest_url,
@@ -71,29 +72,33 @@ class AtomBrowserClient : public brightray::BrowserClient,
       bool overridable,
       bool strict_enforcement,
       bool expired_previous_decision,
-      const base::Callback<void(bool)>& callback,
-      content::CertificateRequestResultType* request) override;
+      const base::Callback<void(content::CertificateRequestResultType)>&
+          callback) override;
   void SelectClientCertificate(
       content::WebContents* web_contents,
       net::SSLCertRequestInfo* cert_request_info,
       std::unique_ptr<content::ClientCertificateDelegate> delegate) override;
   void ResourceDispatcherHostCreated() override;
-  bool CanCreateWindow(const GURL& opener_url,
-                       const GURL& opener_top_level_frame_url,
-                       const GURL& source_origin,
-                       WindowContainerType container_type,
-                       const std::string& frame_name,
-                       const GURL& target_url,
-                       const content::Referrer& referrer,
-                       WindowOpenDisposition disposition,
-                       const blink::WebWindowFeatures& features,
-                       bool user_gesture,
-                       bool opener_suppressed,
-                       content::ResourceContext* context,
-                       int render_process_id,
-                       int opener_render_view_id,
-                       int opener_render_frame_id,
-                       bool* no_javascript_access) override;
+  bool CanCreateWindow(
+      int opener_render_process_id,
+      int opener_render_frame_id,
+      const GURL& opener_url,
+      const GURL& opener_top_level_frame_url,
+      const GURL& source_origin,
+      content::mojom::WindowContainerType container_type,
+      const GURL& target_url,
+      const content::Referrer& referrer,
+      const std::string& frame_name,
+      WindowOpenDisposition disposition,
+      const blink::mojom::WindowFeatures& features,
+      const std::vector<std::string>& additional_features,
+      const scoped_refptr<content::ResourceRequestBodyImpl>& body,
+      bool user_gesture,
+      bool opener_suppressed,
+      content::ResourceContext* context,
+      bool* no_javascript_access) override;
+  void GetAdditionalAllowedSchemesForFileSystem(
+      std::vector<std::string>* schemes) override;
 
   // brightray::BrowserClient:
   brightray::BrowserMainParts* OverrideCreateBrowserMainParts(
@@ -104,10 +109,33 @@ class AtomBrowserClient : public brightray::BrowserClient,
 
   // content::RenderProcessHostObserver:
   void RenderProcessHostDestroyed(content::RenderProcessHost* host) override;
+  void RenderProcessReady(content::RenderProcessHost* host) override;
+  void RenderProcessExited(content::RenderProcessHost* host,
+                           base::TerminationStatus status,
+                           int exit_code) override;
 
  private:
-  // pending_render_process => current_render_process.
-  std::map<int, int> pending_processes_;
+  bool ShouldCreateNewSiteInstance(content::RenderFrameHost* render_frame_host,
+                                   content::BrowserContext* browser_context,
+                                   content::SiteInstance* current_instance,
+                                   const GURL& dest_url);
+  struct ProcessPreferences {
+    bool sandbox;
+    bool native_window_open;
+    bool disable_popups;
+  };
+  void AddProcessPreferences(int process_id, ProcessPreferences prefs);
+  void RemoveProcessPreferences(int process_id);
+  bool IsRendererSandboxed(int process_id);
+  bool RendererUsesNativeWindowOpen(int process_id);
+  bool RendererDisablesPopups(int process_id);
+
+  // pending_render_process => web contents.
+  std::map<int, content::WebContents*> pending_processes_;
+
+  std::map<int, ProcessPreferences> process_preferences_;
+  std::map<int, base::ProcessId> render_process_host_pids_;
+  base::Lock process_preferences_lock_;
 
   std::unique_ptr<AtomResourceDispatcherHostDelegate>
       resource_dispatcher_host_delegate_;

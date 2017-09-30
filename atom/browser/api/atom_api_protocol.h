@@ -5,8 +5,8 @@
 #ifndef ATOM_BROWSER_API_ATOM_API_PROTOCOL_H_
 #define ATOM_BROWSER_API_ATOM_API_PROTOCOL_H_
 
-#include <string>
 #include <map>
+#include <string>
 #include <vector>
 
 #include "atom/browser/api/trackable_object.h"
@@ -28,6 +28,10 @@ namespace atom {
 
 namespace api {
 
+std::vector<std::string> GetStandardSchemes();
+void RegisterStandardSchemes(const std::vector<std::string>& schemes,
+                             mate::Arguments* args);
+
 class Protocol : public mate::TrackableObject<Protocol> {
  public:
   using Handler =
@@ -39,7 +43,7 @@ class Protocol : public mate::TrackableObject<Protocol> {
       v8::Isolate* isolate, AtomBrowserContext* browser_context);
 
   static void BuildPrototype(v8::Isolate* isolate,
-                             v8::Local<v8::ObjectTemplate> prototype);
+                             v8::Local<v8::FunctionTemplate> prototype);
 
  protected:
   Protocol(v8::Isolate* isolate, AtomBrowserContext* browser_context);

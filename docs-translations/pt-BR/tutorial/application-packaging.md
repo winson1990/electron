@@ -7,7 +7,7 @@ alterações em seu código.
 ## Gerando um arquivo `asar`
 
 Um arquivo [asar][asar] é um formato parecido com tar ou zip bem simples que concatena arquivos
-em um único arquivo. O Electron pode ler arquivos arbitrários a partir dele sem descompacatar
+em um único arquivo. O Electron pode ler arquivos arbitrários a partir dele sem descompactar
 o arquivo inteiro.
 
 Passos para empacotar a sua aplicação em um arquivo `asar`:
@@ -49,29 +49,29 @@ $ asar list /path/to/example.asar
 Lendo um arquivo em pacote `asar`:
 
 ```javascript
-var fs = require('fs');
-fs.readFileSync('/path/to/example.asar/file.txt');
+var fs = require('fs')
+fs.readFileSync('/path/to/example.asar/file.txt')
 ```
 
 Listando todos os arquivos a partir da raiz:
 
 ```javascript
-var fs = require('fs');
-fs.readdirSync('/path/to/example.asar');
+var fs = require('fs')
+fs.readdirSync('/path/to/example.asar')
 ```
 
 Utilizando um módulo dentro do pacote `asar`:
 
 ```javascript
-require('/path/to/example.asar/dir/module.js');
+require('/path/to/example.asar/dir/module.js')
 ```
 
 Você também pode renderizar uma página web apartir de um arquivo `asar` utilizando o módulo `BrowserWindow`:
 
 ```javascript
-var BrowserWindow = require('browser-window');
-var win = new BrowserWindow({width: 800, height: 600});
-win.loadURL('file:///path/to/example.asar/static/index.html');
+var BrowserWindow = require('browser-window')
+var win = new BrowserWindow({width: 800, height: 600})
+win.loadURL('file:///path/to/example.asar/static/index.html')
 ```
 
 ### API Web
@@ -97,8 +97,8 @@ o arquivo `asar` como um arquivo normal. Para isto, você pode usar o built-in
 `original-fs` que fornece a API `fs`, sem apoio a arquivos asar`:
 
 ```javascript
-var originalFs = require('original-fs');
-originalFs.readFileSync('/path/to/example.asar');
+var originalFs = require('original-fs')
+originalFs.readFileSync('/path/to/example.asar')
 ```
 
 ## Limitaçõs na API Node
@@ -133,7 +133,7 @@ APIs que requer descompactação extras são:
 
 ### Falsas informações de status do módulo `fs.stat`
 
-O objeto `Stats` retornado por` fs.stat` e outras funções relacionadas não são informações confiáveis, 
+O objeto `Stats` retornado por` fs.stat` e outras funções relacionadas não são informações confiáveis,
 você não deve confiar no objeto `Stats` exceto para obter o
 tamanho do arquivo e verificação de tipo de arquivo.
 

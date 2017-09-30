@@ -1,7 +1,7 @@
 使用している Electron のバージョンに応じたドキュメントを使うように確認してください。
 ドキュメントのバージョン番号はページの URL の一部になっています。
 そうでない場合、おそらくご使用の Electron のバージョンと互換性のない API 変更を含んだ development ブランチのドキュメントを使っているものと思われます。
-その場合、atom.io の [available versions](http://electron.atom.io/docs/) リストにある別のバージョンのドキュメントに切り替えることができます。また GitHub で閲覧している場合、"Switch branches/tags" ドロップダウンを開いて、バージョンに対応したタグを選ぶこともできます。
+その場合、atom.io の [available versions](https://electron.atom.io/docs/) リストにある別のバージョンのドキュメントに切り替えることができます。また GitHub で閲覧している場合、"Switch branches/tags" ドロップダウンを開いて、バージョンに対応したタグを選ぶこともできます。
 
 _リンクになっていないリストは未翻訳のものです。_
 ## FAQ
@@ -25,7 +25,8 @@ _リンクになっていないリストは未翻訳のものです。_
 * [DevTools エクステンション](tutorial/devtools-extension.md)
 * [Pepper Flashプラグインを使用する](tutorial/using-pepper-flash-plugin.md)
 * [Widevine CDMプラグインを使用する](tutorial/using-widevine-cdm-plugin.md)
-* Testing on Headless CI Systems (Travis, Jenkins) (tutorial/testing-on-headless-ci.md)
+* [継続的インテグレーションシステムによるテスト(Travis, Jenkins)](tutorial/testing-on-headless-ci.md)
+* [キーボードショートカット](tutorial/keyboard-shortcuts.md)
 
 
 # チュートリアル
@@ -44,7 +45,7 @@ _リンクになっていないリストは未翻訳のものです。_
 ### カスタムDOM要素:
 
 * [`File` Object](api/file-object.md)
-* [`<webview>` タグ](api/web-view-tag.md)
+* [`<webview>` タグ](api/webview-tag.md)
 * [`window.open` 関数](api/window-open.md)
 
 ### Main Processのモジュール:
@@ -63,9 +64,9 @@ _リンクになっていないリストは未翻訳のものです。_
 * [powerSaveBlocker](api/power-save-blocker.md)
 * [protocol](api/protocol.md)
 * [session](api/session.md)
-* systemPreferences (api/system-preferences.md)
-* webContents (api/web-contents.md)
+* [systemPreferences](api/system-preferences.md)
 * [Tray](api/tray.md)
+* webContents (api/web-contents.md)
 
 ### Renderer Processのモジュール (Web Page):
 
@@ -85,12 +86,12 @@ _リンクになっていないリストは未翻訳のものです。_
 ## 開発
 
 
-* Coding Style (development/coding-style.md)
+* [コーディング規約](development/coding-style.md)
 * Source Code Directory Structure (development/source-code-directory-structure.md)
-* Technical Differences to NW.js  (formerly node-webkit)(development/atom-shell-vs-node-webkit.md)
+* [NW.js(node-webkit) との技術的違い](development/atom-shell-vs-node-webkit.md)
 * Build System Overview (development/build-system-overview.md)
-* Build Instructions (macOS) (development/build-instructions-osx.md)
+* [ビルド方法(macOS)](development/build-instructions-osx.md)
 * Build Instructions (Windows) (development/build-instructions-windows.md)
-* Build Instructions (Linux) (development/build-instructions-linux.md)
+* [ビルド方法(Linux)](development/build-instructions-linux.md)
 * Debug Instructions (Windows) (development/debug-instructions-windows.md)
 * Setting Up Symbol Server in debugger (development/setting-up-symbol-server.md)

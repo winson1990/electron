@@ -5,14 +5,14 @@
 リモートサーバーに自動的にクラッシュレポートを登録する例です。
 
 ```javascript
-const crashReporter = require('electron').crashReporter;
+const crashReporter = require('electron').crashReporter
 
 crashReporter.start({
   productName: 'YourName',
   companyName: 'YourCompany',
   submitURL: 'https://your-domain.com/url-to-submit',
   autoSubmit: true
-});
+})
 ```
 
 ## メソッド
@@ -45,7 +45,7 @@ crashReporter.start({
 
 ### `crashReporter.getUploadedReports()`
 
-滑ってのアップロードされたクラッシュレポートが返されます。それぞれのレポートには日付とアップロードされたIDが含まれます。
+すべてのアップロードされたクラッシュレポートが返されます。それぞれのレポートには日付とアップロードされたIDが含まれます。
 
 ## crash-reporter Payload
 

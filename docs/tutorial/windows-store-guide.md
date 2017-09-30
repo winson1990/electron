@@ -1,6 +1,6 @@
 # Windows Store Guide
 
-With Windows 8, the good old win32 executable got a new sibling: The Universal
+With Windows 10, the good old win32 executable got a new sibling: The Universal
 Windows Platform. The new `.appx` format does not only enable a number of new
 powerful APIs like Cortana or Push Notifications, but through the Windows Store,
 also simplifies installation and updating.
@@ -30,8 +30,7 @@ applications.
 To compile any existing Electron app, ensure that you have the following
 requirements:
 
-* Windows 10 Anniversary Update (until the update is released to the general public,
-developers can use the Windows Insider Preview)
+* Windows 10 with Anniversary Update (released August 2nd, 2016)
 * The Windows 10 SDK, [downloadable here][windows-sdk]
 * At least Node 4 (to check, run `node -v`)
 
@@ -70,8 +69,7 @@ The output should look roughly like this:
 │   └── atom.asar
 ├── snapshot_blob.bin
 ├── squirrel.exe
-├── ui_resources_200_percent.pak
-└── xinput1_3.dll
+└── ui_resources_200_percent.pak
 ```
 
 ## Step 2: Running electron-windows-store
@@ -105,11 +103,15 @@ automatically install the package on your machine.
 
 ## Step 3: Using the AppX Package
 
-Since the Windows Anniversary Update (codenamed Windows Redstone) has not been
-released to consumers yet, you won't be able to release your app to the Windows
-Store until later this year - but you can already use the `Add-AppxPackage`
-[PowerShell Cmdlet to install it on machines][add-appxpackage]
-in developer or enterprise environments.
+In order to run your package, your users will need Windows 10 with the so-called
+"Anniversary Update" - details on how to update Windows can be found [here][how-to-update].
+
+In opposition to traditional UWP apps, packaged apps currently need to undergo a
+manual verification process, for which you can apply [here][centennial-campaigns].
+In the meantime, all users will be able to just install your package by double-clicking it,
+so a submission to the store might not be necessary if you're simply looking for an
+easier installation method. In managed environments (usually enterprises), the
+`Add-AppxPackage` [PowerShell Cmdlet can be used to install it in an automated fashion][add-appxpackage].
 
 Another important limitation is that the compiled AppX package still contains a
 win32 executable - and will therefore not run on Xbox, HoloLens, or Phones.
@@ -122,7 +124,7 @@ Cortana integration, or live tiles.
 To check out how an Electron app that uses a background task to send toast
 notifications and live tiles, [check out the Microsoft-provided sample][background-task].
 
-## Optional: Convert using Container Virtualiziation
+## Optional: Convert using Container Virtualization
 
 To generate the AppX package, the `electron-windows-store` CLI uses a template
 that should work for most Electron apps. However, if you are using a custom
@@ -132,7 +134,7 @@ that mode, the CLI will install and run your application in blank Windows Contai
 to determine what modifications your application is exactly doing to the operating
 system.
 
-Before running the CLI for the, you will have to setup the "Windows Desktop App
+Before running the CLI for the first time, you will have to setup the "Windows Desktop App
 Converter". This will take a few minutes, but don't worry - you only have to do
 this once. Download and Desktop App Converter from [here][app-converter].
 You will receive two files: `DesktopAppConverter.zip` and `BaseImage-14316.wim`.
@@ -154,3 +156,5 @@ Once installation succeeded, you can move on to compiling your Electron app.
 [electron-packager]: https://github.com/electron-userland/electron-packager
 [electron-windows-store]: https://github.com/catalystcode/electron-windows-store
 [background-task]: https://github.com/felixrieseberg/electron-uwp-background
+[centennial-campaigns]: https://developer.microsoft.com/en-us/windows/projects/campaigns/desktop-bridge
+[how-to-update]: https://blogs.windows.com/windowsexperience/2016/08/02/how-to-get-the-windows-10-anniversary-update

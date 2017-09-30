@@ -2,6 +2,7 @@ const assert = require('assert')
 const ChildProcess = require('child_process')
 const fs = require('fs')
 const path = require('path')
+const {closeWindow} = require('./window-helpers')
 
 const nativeImage = require('electron').nativeImage
 const remote = require('electron').remote
@@ -94,6 +95,15 @@ describe('asar package', function () {
         fs.readFile(p, function (err, content) {
           assert.equal(err, null)
           assert.equal(String(content), '')
+          done()
+        })
+      })
+
+      it('reads from a empty file with encoding', function (done) {
+        var p = path.join(fixtures, 'asar', 'empty.asar', 'file1')
+        fs.readFile(p, 'utf8', function (err, content) {
+          assert.equal(err, null)
+          assert.equal(content, '')
           done()
         })
       })
@@ -743,11 +753,59 @@ describe('asar package', function () {
           fs.readdirSync(asar)
         }, /ENOTDIR/)
       })
+
+      it('is reset to its original value when execSync throws an error', function () {
+        process.noAsar = false
+        assert.throws(function () {
+          ChildProcess.execSync(path.join(__dirname, 'does-not-exist.txt'))
+        })
+        assert.equal(process.noAsar, false)
+      })
+    })
+
+    describe('process.env.ELECTRON_NO_ASAR', function () {
+      it('disables asar support in forked processes', function (done) {
+        const forked = ChildProcess.fork(path.join(__dirname, 'fixtures', 'module', 'no-asar.js'), [], {
+          env: {
+            ELECTRON_NO_ASAR: true
+          }
+        })
+        forked.on('message', function (stats) {
+          assert.equal(stats.isFile, true)
+          assert.equal(stats.size, 778)
+          done()
+        })
+      })
+
+      it('disables asar support in spawned processes', function (done) {
+        const spawned = ChildProcess.spawn(process.execPath, [path.join(__dirname, 'fixtures', 'module', 'no-asar.js')], {
+          env: {
+            ELECTRON_NO_ASAR: true,
+            ELECTRON_RUN_AS_NODE: true
+          }
+        })
+
+        let output = ''
+        spawned.stdout.on('data', function (data) {
+          output += data
+        })
+        spawned.stdout.on('close', function () {
+          const stats = JSON.parse(output)
+          assert.equal(stats.isFile, true)
+          assert.equal(stats.size, 778)
+          done()
+        })
+      })
     })
   })
 
   describe('asar protocol', function () {
     var url = require('url')
+    var w = null
+
+    afterEach(function () {
+      return closeWindow(w).then(function () { w = null })
+    })
 
     it('can request a file in package', function (done) {
       var p = path.resolve(fixtures, 'asar', 'a.asar', 'file1')
@@ -794,11 +852,10 @@ describe('asar package', function () {
 
     it('sets __dirname correctly', function (done) {
       after(function () {
-        w.destroy()
         ipcMain.removeAllListeners('dirname')
       })
 
-      var w = new BrowserWindow({
+      w = new BrowserWindow({
         show: false,
         width: 400,
         height: 400
@@ -818,11 +875,10 @@ describe('asar package', function () {
 
     it('loads script tag in html', function (done) {
       after(function () {
-        w.destroy()
         ipcMain.removeAllListeners('ping')
       })
 
-      var w = new BrowserWindow({
+      w = new BrowserWindow({
         show: false,
         width: 400,
         height: 400
@@ -837,6 +893,35 @@ describe('asar package', function () {
       ipcMain.once('ping', function (event, message) {
         assert.equal(message, 'pong')
         done()
+      })
+    })
+
+    it('loads video tag in html', function (done) {
+      this.timeout(60000)
+
+      after(function () {
+        ipcMain.removeAllListeners('asar-video')
+      })
+
+      w = new BrowserWindow({
+        show: false,
+        width: 400,
+        height: 400
+      })
+      var p = path.resolve(fixtures, 'asar', 'video.asar', 'index.html')
+      var u = url.format({
+        protocol: 'file',
+        slashed: true,
+        pathname: p
+      })
+      w.loadURL(u)
+      ipcMain.on('asar-video', function (event, message, error) {
+        if (message === 'ended') {
+          assert(!error)
+          done()
+        } else if (message === 'error') {
+          done(error)
+        }
       })
     })
   })
