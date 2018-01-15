@@ -23,7 +23,6 @@
 #include "base/win/registry.h"
 #include "base/win/win_util.h"
 #include "base/win/windows_version.h"
-#include "brightray/common/switches.h"
 
 namespace atom {
 
@@ -61,16 +60,12 @@ bool GetProtocolLaunchPath(mate::Arguments* args, base::string16* exe) {
 
   // Read in optional args arg
   std::vector<base::string16> launch_args;
-  std::wstring electronOneMoreArg = base::UTF8ToUTF16(
-    brightray::switches::kElectronOneMoreArg);
   if (args->GetNext(&launch_args) && !launch_args.empty())
-    *exe = base::StringPrintf(L"\"%ls\" %ls %ls \"%%1\"",
+    *exe = base::StringPrintf(L"\"%ls\" %ls \"%%1\"",
                               exe->c_str(),
-                              base::JoinString(launch_args, L" ").c_str(),
-                              electronOneMoreArg.c_str());
+                              base::JoinString(launch_args, L" ").c_str());
   else
-    *exe = base::StringPrintf(L"\"%ls\" %ls \"%%1\"", exe->c_str(),
-                              electronOneMoreArg.c_str());
+    *exe = base::StringPrintf(L"\"%ls\" \"%%1\"", exe->c_str());
   return true;
 }
 
@@ -336,64 +331,6 @@ std::string Browser::GetExecutableFileProductName() const {
   }
 
   return ATOM_PRODUCT_NAME;
-}
-
-void Browser::PatchProtocolHandlers() {
-  base::string16 quoted_exe;
-  if (!GetProcessExecPath(&quoted_exe))
-    return;
-  quoted_exe.insert(0, 1, L'"').push_back(L'"');
-
-  base::string16 electronOneMoreArg =
-      base::UTF8ToUTF16(brightray::switches::kElectronOneMoreArg);
-  auto wildcardEnding = L" \"%1\"";
-  base::string16 safeWildcardEnding =
-      L" " + electronOneMoreArg + wildcardEnding;
-
-  base::win::RegKey classes_key;
-  LONG result = classes_key.Open(HKEY_CURRENT_USER, L"Software\\Classes",
-                                 KEY_ENUMERATE_SUB_KEYS);
-  if (result == ERROR_SUCCESS) {
-    for (DWORD i = 0;; ++i) {
-      TCHAR subkey_name[MAX_PATH];
-      DWORD size = _countof(subkey_name);
-      result = RegEnumKeyEx(classes_key.Handle(), i, subkey_name, &size, NULL,
-                            NULL, NULL, NULL);
-      if (result == ERROR_NO_MORE_ITEMS)
-        break;
-      if (result != ERROR_SUCCESS)
-        continue;
-
-      if (subkey_name[0] == '.')
-          continue;
-
-      auto cmd_path = std::wstring(subkey_name) + L"\\shell\\open\\command";
-
-      base::win::RegKey command_key;
-      if (command_key.Open(classes_key.Handle(), cmd_path.c_str(),
-                           KEY_QUERY_VALUE | KEY_SET_VALUE) != ERROR_SUCCESS)
-        continue;
-
-      std::wstring command_value;
-      if (command_key.ReadValue(nullptr, &command_value) != ERROR_SUCCESS)
-        continue;
-
-      if (!base::StartsWith(command_value, quoted_exe,
-                            base::CompareCase::INSENSITIVE_ASCII))
-        continue;
-      if (!base::EndsWith(command_value, wildcardEnding,
-                          base::CompareCase::SENSITIVE))
-        continue;
-      if (base::EndsWith(command_value, safeWildcardEnding,
-                         base::CompareCase::SENSITIVE))
-        continue;
-
-      command_value.resize(command_value.size() - wcslen(wildcardEnding));
-      command_value.append(safeWildcardEnding);
-
-      command_key.WriteValue(nullptr, command_value.c_str());
-    }
-  }
 }
 
 }  // namespace atom

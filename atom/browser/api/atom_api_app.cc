@@ -577,11 +577,6 @@ void App::OnFinishLaunching(const base::DictionaryValue& launch_info) {
   media::AudioManager::SetGlobalAppName(Browser::Get()->GetName());
 #endif
   Emit("ready", launch_info);
-
-  // todo(marshallofsound): Remove in 2.0.0 and replace with URI protection
-#if defined(OS_WIN)
-  Browser::Get()->PatchProtocolHandlers();
-#endif
 }
 
 void App::OnPreMainMessageLoopRun() {

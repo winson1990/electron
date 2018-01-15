@@ -4,10 +4,7 @@
 
 #include "atom/common/atom_command_line.h"
 
-#include "atom/browser/browser.h"
 #include "base/command_line.h"
-#include "base/strings/utf_string_conversions.h"
-#include "brightray/common/switches.h"
 #include "node/deps/uv/include/uv.h"
 
 namespace atom {
@@ -25,14 +22,6 @@ void AtomCommandLine::Init(int argc, const char* const* argv) {
   // Hack around with the argv pointer. Used for process.title = "blah"
   char** new_argv = uv_setup_args(argc, const_cast<char**>(argv));
   for (int i = 0; i < argc; ++i) {
-    if (strcmp(new_argv[i], brightray::switches::kElectronOneMoreArg) == 0) {
-      if (i + 2 < argc) {
-        LOG(ERROR) << "Potentially malicious attempt to launch Electron,"
-                   << "expected one argument for a URI handler but got more";
-      }
-      CHECK(i + 2 >= argc);
-      continue;
-    }
     argv_.push_back(new_argv[i]);
   }
 }

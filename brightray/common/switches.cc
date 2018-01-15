@@ -53,10 +53,6 @@ const char kAuthNegotiateDelegateWhitelist[] =
 // Forces the maximum disk space to be used by the disk cache, in bytes.
 const char kDiskCacheSize[] = "disk-cache-size";
 
-// Forces only one more arg after this one
-// If there are any more the app will terminate
-const char kElectronOneMoreArg[] = "--electron-one-more-arg";
-
 }  // namespace switches
 
 }  // namespace brightray

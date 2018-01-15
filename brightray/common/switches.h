@@ -19,8 +19,6 @@ extern const char kAuthServerWhitelist[];
 extern const char kAuthNegotiateDelegateWhitelist[];
 extern const char kDiskCacheSize[];
 
-extern const char kElectronOneMoreArg[];
-
 }  // namespace switches
 
 }  // namespace brightray
