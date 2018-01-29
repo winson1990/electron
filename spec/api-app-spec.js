@@ -515,6 +515,16 @@ describe('app module', function () {
       })
     })
 
+    it('does not launch for mixed-case blacklisted argument', function (done) {
+      const appPath = path.join(__dirname, 'fixtures', 'api', 'quit-app')
+      // App should exit with non 123 code.
+      const first = ChildProcess.spawn(remote.process.execPath, [appPath, 'electron-test://?', '--no-SaNdbox'])
+      first.once('exit', (code) => {
+        assert.notEqual(code, 123)
+        done()
+      })
+    })
+
     it('launches successfully for multiple uris in cmd args', function (done) {
       const appPath = path.join(__dirname, 'fixtures', 'api', 'quit-app')
       // App should exit with code 123.
