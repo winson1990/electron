@@ -10,8 +10,7 @@ from lib.util import safe_mkdir, rm_rf, extract_zip, tempdir, download
 
 VERSION = 'v1.2.2'
 SOURCE_ROOT = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
-FRAMEWORKS_URL = 'http://github.com/electron/electron-frameworks/releases' \
-                 '/download/' + VERSION
+FRAMEWORKS_URL = 'https://dropsskypeelectron.blob.core.windows.net/external-binaries/' + VERSION
 
 
 def main():
