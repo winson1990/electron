@@ -8,6 +8,7 @@
 
 #include "atom/common/api/api_messages.h"
 #include "atom/common/api/atom_bindings.h"
+#include "atom/common/api/watchdog.h"
 #include "atom/common/native_mate_converters/string16_converter.h"
 #include "atom/common/native_mate_converters/v8_value_converter.h"
 #include "atom/common/native_mate_converters/value_converter.h"
@@ -17,6 +18,7 @@
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/memory/ptr_util.h"
 #include "chrome/renderer/printing/print_web_view_helper.h"
 #include "content/public/renderer/render_frame.h"
 #include "content/public/renderer/render_view.h"
@@ -85,8 +87,9 @@ base::CommandLine::StringVector GetArgv() {
   return base::CommandLine::ForCurrentProcess()->argv();
 }
 
-void InitializeBindings(v8::Local<v8::Object> binding,
-                        v8::Local<v8::Context> context) {
+void InitializeBindingsImpl(AtomSandboxedRendererClient* self,
+                            v8::Local<v8::Object> binding,
+                            v8::Local<v8::Context> context) {
   auto isolate = context->GetIsolate();
   mate::Dictionary b(isolate, binding);
   b.SetMethod("get", GetBinding);
@@ -95,6 +98,12 @@ void InitializeBindings(v8::Local<v8::Object> binding,
   b.SetMethod("getArgv", GetArgv);
   b.SetMethod("getProcessMemoryInfo", &AtomBindings::GetProcessMemoryInfo);
   b.SetMethod("getSystemMemoryInfo", &AtomBindings::GetSystemMemoryInfo);
+  b.SetMethod("startWatchdog",
+      base::Bind(&AtomSandboxedRendererClient::StartWatchdog,
+      base::Unretained(self)));
+  b.SetMethod("stopWatchdog",
+      base::Bind(&AtomSandboxedRendererClient::StopWatchdog,
+      base::Unretained(self)));
 }
 
 class AtomSandboxedRenderViewObserver : public AtomRenderViewObserver {
@@ -141,6 +150,11 @@ AtomSandboxedRendererClient::AtomSandboxedRendererClient() {
 }
 
 AtomSandboxedRendererClient::~AtomSandboxedRendererClient() {
+}
+
+void AtomSandboxedRendererClient::InitializeBindings(
+    v8::Local<v8::Object> binding, v8::Local<v8::Context> context) {
+  InitializeBindingsImpl(this, binding, context);
 }
 
 void AtomSandboxedRendererClient::RenderFrameCreated(
@@ -228,6 +242,14 @@ void AtomSandboxedRendererClient::InvokeIpcCallback(
   DCHECK(callback_value->IsFunction());  // set by sandboxed_renderer/init.js
   auto callback = v8::Handle<v8::Function>::Cast(callback_value);
   ignore_result(callback->Call(context, binding, args.size(), args.data()));
+}
+
+void AtomSandboxedRendererClient::StartWatchdog(unsigned int timeout) {
+  watchdog_ = base::MakeUnique<Watchdog>(timeout);
+}
+
+void AtomSandboxedRendererClient::StopWatchdog() {
+  watchdog_.reset();
 }
 
 }  // namespace atom

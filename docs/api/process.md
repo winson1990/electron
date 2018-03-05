@@ -98,6 +98,16 @@ The `process` object has the following methods:
 
 Causes the main thread of the current process crash.
 
+### `process.startWatchdog(timeout)`
+
+* `timeout` Integer - Milliseconds.
+
+Starts the watchdog.
+
+### `process.stopWatchdog()`
+
+Stops the watchdog.
+
 ### `process.getCPUUsage()`
 
 Returns [`CPUUsage`](structures/cpu-usage.md)

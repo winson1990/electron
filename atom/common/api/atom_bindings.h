@@ -20,6 +20,8 @@ class Environment;
 
 namespace atom {
 
+class Watchdog;
+
 class AtomBindings {
  public:
   explicit AtomBindings(uv_loop_t* loop);
@@ -35,6 +37,8 @@ class AtomBindings {
   static void Log(const base::string16& message);
   static void Crash();
   static void Hang();
+  void StartWatchdog(unsigned int timeout);
+  void StopWatchdog();
   static v8::Local<v8::Value> GetProcessMemoryInfo(v8::Isolate* isolate);
   static v8::Local<v8::Value> GetSystemMemoryInfo(v8::Isolate* isolate,
       mate::Arguments* args);
@@ -49,6 +53,7 @@ class AtomBindings {
   uv_async_t call_next_tick_async_;
   std::list<node::Environment*> pending_next_ticks_;
   std::unique_ptr<base::ProcessMetrics> metrics_;
+  std::unique_ptr<Watchdog> watchdog_;
 
   DISALLOW_COPY_AND_ASSIGN(AtomBindings);
 };

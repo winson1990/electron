@@ -8,11 +8,13 @@
 #include <iostream>
 #include <string>
 
+#include "atom/common/api/watchdog.h"
 #include "atom/common/atom_version.h"
 #include "atom/common/chrome_version.h"
 #include "atom/common/native_mate_converters/string16_converter.h"
 #include "atom/common/node_includes.h"
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
 #include "base/sys_info.h"
 #include "native_mate/dictionary.h"
 
@@ -51,6 +53,10 @@ void AtomBindings::BindTo(v8::Isolate* isolate,
   dict.SetMethod("crash", &AtomBindings::Crash);
   dict.SetMethod("hang", &Hang);
   dict.SetMethod("log", &Log);
+  dict.SetMethod("startWatchdog",
+      base::Bind(&AtomBindings::StartWatchdog, base::Unretained(this)));
+  dict.SetMethod("stopWatchdog",
+      base::Bind(&AtomBindings::StopWatchdog, base::Unretained(this)));
   dict.SetMethod("getProcessMemoryInfo", &GetProcessMemoryInfo);
   dict.SetMethod("getSystemMemoryInfo", &GetSystemMemoryInfo);
   dict.SetMethod("getCPUUsage",
@@ -133,6 +139,14 @@ void AtomBindings::Crash() {
 void AtomBindings::Hang() {
   for (;;)
     base::PlatformThread::Sleep(base::TimeDelta::FromSeconds(1));
+}
+
+void AtomBindings::StartWatchdog(unsigned int timeout) {
+  watchdog_ = base::MakeUnique<Watchdog>(timeout);
+}
+
+void AtomBindings::StopWatchdog() {
+  watchdog_.reset();
 }
 
 // static
