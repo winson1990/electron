@@ -34,6 +34,9 @@ app.commandLine.appendSwitch('disable-renderer-backgrounding')
 // sure we can reproduce it in renderer process.
 process.stdout
 
+// Adding a variable for sandbox process.env test validation
+process.env.sandboxmain = ''
+
 // Access console to reproduce #3482.
 console
 
