@@ -99,6 +99,9 @@ class AtomBrowserClient : public brightray::BrowserClient,
       bool* no_javascript_access) override;
   void GetAdditionalAllowedSchemesForFileSystem(
       std::vector<std::string>* schemes) override;
+#if defined(OS_WIN)
+  bool AllowVideoRendererInSandbox(int process_id) override;
+#endif
 
   // brightray::BrowserClient:
   brightray::BrowserMainParts* OverrideCreateBrowserMainParts(
@@ -123,6 +126,7 @@ class AtomBrowserClient : public brightray::BrowserClient,
     bool sandbox;
     bool native_window_open;
     bool disable_popups;
+    bool allow_video_renderer_in_sandbox;
   };
   void AddProcessPreferences(int process_id, ProcessPreferences prefs);
   void RemoveProcessPreferences(int process_id);

@@ -244,6 +244,11 @@ bool WebContentsPreferences::DisablePopups(
   return IsPreferenceEnabled("disablePopups", web_contents);
 }
 
+bool WebContentsPreferences::AllowVideoRendererInSandbox(
+    content::WebContents* web_contents) {
+  return IsPreferenceEnabled("allowVideoRendererInSandbox", web_contents);
+}
+
 // static
 void WebContentsPreferences::OverrideWebkitPrefs(
     content::WebContents* web_contents, content::WebPreferences* prefs) {

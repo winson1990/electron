@@ -172,6 +172,8 @@ void AtomBrowserClient::RenderProcessWillLaunch(
       = WebContentsPreferences::UsesNativeWindowOpen(web_contents);
   process_prefs.disable_popups
       = WebContentsPreferences::DisablePopups(web_contents);
+  process_prefs.allow_video_renderer_in_sandbox
+      = WebContentsPreferences::AllowVideoRendererInSandbox(web_contents);
   AddProcessPreferences(host->GetID(), process_prefs);
   // ensure the ProcessPreferences is removed later
   host->AddObserver(this);
@@ -398,6 +400,14 @@ void AtomBrowserClient::GetAdditionalAllowedSchemesForFileSystem(
                                schemes_list.end());
   additional_schemes->push_back(content::kChromeDevToolsScheme);
 }
+
+#if defined(OS_WIN)
+bool AtomBrowserClient::AllowVideoRendererInSandbox(int process_id) {
+  base::AutoLock auto_lock(process_preferences_lock_);
+  auto it = process_preferences_.find(process_id);
+  return it != process_preferences_.end() && it->second.allow_video_renderer_in_sandbox;
+}
+#endif
 
 brightray::BrowserMainParts* AtomBrowserClient::OverrideCreateBrowserMainParts(
     const content::MainFunctionParams&) {

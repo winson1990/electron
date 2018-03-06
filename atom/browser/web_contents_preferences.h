@@ -43,6 +43,7 @@ class WebContentsPreferences
   static bool UsesNativeWindowOpen(content::WebContents* web_contents);
   static bool DisablePopups(content::WebContents* web_contents);
   static bool IsPluginsEnabled(content::WebContents* web_contents);
+  static bool AllowVideoRendererInSandbox(content::WebContents* web_contents);
 
   // Modify the WebPreferences according to |web_contents|'s preferences.
   static void OverrideWebkitPrefs(

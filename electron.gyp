@@ -462,6 +462,8 @@
           '-r',
           './lib/sandboxed_renderer/api/exports/path.js:path',
           '-r',
+          './lib/sandboxed_renderer/api/exports/video-renderer/index.js:video_renderer',
+          '-r',
           './lib/sandboxed_renderer/api/exports/child_process.js:child_process'
         ],
         'isolated_args': [
