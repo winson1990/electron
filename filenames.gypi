@@ -403,6 +403,8 @@
       'atom/common/api/remote_object_freer.h',
       'atom/common/api/watchdog.cc',
       'atom/common/api/watchdog.h',
+      'atom/common/api/weak_reference.cc',
+      'atom/common/api/weak_reference.h',
       'atom/common/asar/archive.cc',
       'atom/common/asar/archive.h',
       'atom/common/asar/asar_util.cc',

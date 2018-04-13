@@ -9,6 +9,7 @@
 #include <string>
 
 #include "atom/common/api/watchdog.h"
+#include "atom/common/api/weak_reference.h"
 #include "atom/common/atom_version.h"
 #include "atom/common/chrome_version.h"
 #include "atom/common/native_mate_converters/string16_converter.h"
@@ -71,6 +72,8 @@ void AtomBindings::BindTo(v8::Isolate* isolate,
 #if defined(MAS_BUILD)
   dict.Set("mas", true);
 #endif
+
+  dict.Set("WeakReference", WeakReference::Init(isolate));
 
   mate::Dictionary versions;
   if (dict.Get("versions", &versions)) {

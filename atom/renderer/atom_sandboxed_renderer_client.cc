@@ -9,6 +9,7 @@
 #include "atom/common/api/api_messages.h"
 #include "atom/common/api/atom_bindings.h"
 #include "atom/common/api/watchdog.h"
+#include "atom/common/api/weak_reference.h"
 #include "atom/common/native_mate_converters/string16_converter.h"
 #include "atom/common/native_mate_converters/v8_value_converter.h"
 #include "atom/common/native_mate_converters/value_converter.h"
@@ -104,6 +105,8 @@ void InitializeBindingsImpl(AtomSandboxedRendererClient* self,
   b.SetMethod("stopWatchdog",
       base::Bind(&AtomSandboxedRendererClient::StopWatchdog,
       base::Unretained(self)));
+
+  b.Set("WeakReference", WeakReference::Init(isolate));
 }
 
 class AtomSandboxedRenderViewObserver : public AtomRenderViewObserver {
