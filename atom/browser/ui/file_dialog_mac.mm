@@ -14,33 +14,119 @@
 #include "base/mac/scoped_cftyperef.h"
 #include "base/strings/sys_string_conversions.h"
 
+@interface PopUpButtonHandler : NSObject
+
+@property(nonatomic, assign) NSSavePanel* savePanel;
+@property(nonatomic, strong) NSArray* fileTypesList;
+
+- (instancetype)initWithPanel:(NSSavePanel*)panel
+                 andTypesList:(NSArray*)typesList;
+- (void)selectFormat:(id)sender;
+
+@end
+
+@implementation PopUpButtonHandler
+
+- (instancetype)initWithPanel:(NSSavePanel*)panel
+                 andTypesList:(NSArray*)typesList {
+  self = [super init];
+  if (self) {
+    [self setSavePanel:panel];
+    [self setFileTypesList:typesList];
+  }
+  return self;
+}
+
+- (void)selectFormat:(id)sender {
+  NSPopUpButton* button = (NSPopUpButton*)sender;
+  NSInteger selectedItemIndex = [button indexOfSelectedItem];
+  NSArray* list = [self fileTypesList];
+  NSArray* fileTypes = [list objectAtIndex:selectedItemIndex];
+
+  // If we meet a '*' file extension, we allow all the file types and no
+  // need to set the specified file types.
+  if ([fileTypes count] == 0 || [fileTypes containsObject:@"*"])
+    [[self savePanel] setAllowedFileTypes:nil];
+  else
+    [[self savePanel] setAllowedFileTypes:fileTypes];
+}
+
+@end
+
+// Manages the PopUpButtonHandler.
+@interface AtomAccessoryView : NSView
+@end
+
+@implementation AtomAccessoryView
+
+- (void)dealloc {
+  auto* popupButton = static_cast<NSPopUpButton*>([[self subviews] objectAtIndex: 1]);
+  [[popupButton target] release];
+  [super dealloc];
+}
+
+@end
+
 namespace file_dialog {
 
 namespace {
 
 void SetAllowedFileTypes(NSSavePanel* dialog, const Filters& filters) {
-  NSMutableSet* file_type_set = [NSMutableSet set];
-  for (size_t i = 0; i < filters.size(); ++i) {
-    const Filter& filter = filters[i];
-    for (size_t j = 0; j < filter.second.size(); ++j) {
-      // If we meet a '*' file extension, we allow all the file types and no
-      // need to set the specified file types.
-      if (filter.second[j] == "*") {
-        [dialog setAllowsOtherFileTypes:YES];
-        return;
-      }
-      base::ScopedCFTypeRef<CFStringRef> ext_cf(
-          base::SysUTF8ToCFStringRef(filter.second[j]));
+  NSMutableArray* file_types_list = [NSMutableArray array];
+  NSMutableArray* filter_names = [NSMutableArray array];
+
+  // Create array to keep file types and their name.
+  for (const Filter& filter : filters) {
+    NSMutableSet* file_type_set = [NSMutableSet set];
+    base::ScopedCFTypeRef<CFStringRef> name_cf(
+        base::SysUTF8ToCFStringRef(filter.first));
+    [filter_names addObject:base::mac::CFToNSCast(name_cf.get())];
+    for (const std::string& ext : filter.second) {
+      base::ScopedCFTypeRef<CFStringRef> ext_cf(base::SysUTF8ToCFStringRef(ext));
       [file_type_set addObject:base::mac::CFToNSCast(ext_cf.get())];
     }
+    [file_types_list addObject:[file_type_set allObjects]];
   }
 
   // Passing empty array to setAllowedFileTypes will cause exception.
   NSArray* file_types = nil;
-  if ([file_type_set count])
-    file_types = [file_type_set allObjects];
-
+  NSUInteger count = [file_types_list count];
+  if (count > 0) {
+    file_types = [[file_types_list objectAtIndex:0] allObjects];
+    // If we meet a '*' file extension, we allow all the file types and no
+    // need to set the specified file types.
+    if ([file_types count] == 0 || [file_types containsObject:@"*"])
+      file_types = nil;
+  }
   [dialog setAllowedFileTypes:file_types];
+
+  if (count <= 1)
+    return;  // don't add file format picker
+
+  // Add file format picker.
+  AtomAccessoryView* accessoryView =
+      [[AtomAccessoryView alloc] initWithFrame:NSMakeRect(0.0, 0.0, 200, 32.0)];
+  NSTextField* label =
+      [[NSTextField alloc] initWithFrame:NSMakeRect(0, 0, 60, 22)];
+
+  [label setEditable:NO];
+  [label setStringValue:@"Format:"];
+  [label setBordered:NO];
+  [label setBezeled:NO];
+  [label setDrawsBackground:NO];
+
+  NSPopUpButton* popupButton = [[NSPopUpButton alloc] initWithFrame:NSMakeRect(50.0, 2, 140, 22.0)
+                                                          pullsDown:NO];
+  PopUpButtonHandler* popUpButtonHandler = [[PopUpButtonHandler alloc] initWithPanel:dialog
+                                                                        andTypesList:file_types_list];
+  [popupButton addItemsWithTitles:filter_names];
+  [popupButton setTarget:popUpButtonHandler];
+  [popupButton setAction:@selector(selectFormat:)];
+
+  [accessoryView addSubview:[label autorelease]];
+  [accessoryView addSubview:[popupButton autorelease]];
+
+  [dialog setAccessoryView:[accessoryView autorelease]];
 }
 
 void SetupDialog(NSSavePanel* dialog,
@@ -62,6 +148,7 @@ void SetupDialog(NSSavePanel* dialog,
   NSString* default_dir = nil;
   NSString* default_filename = nil;
   if (!settings.default_path.empty()) {
+    base::ThreadRestrictions::ScopedAllowIO allow_io;
     if (base::DirectoryExists(settings.default_path)) {
       default_dir = base::SysUTF8ToNSString(settings.default_path.value());
     } else {
