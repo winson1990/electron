@@ -44,6 +44,10 @@ class AtomBindings {
       mate::Arguments* args);
   v8::Local<v8::Value> GetCPUUsage(v8::Isolate* isolate);
   static v8::Local<v8::Value> GetIOCounters(v8::Isolate* isolate);
+#if defined(OS_WIN)
+  static v8::Local<v8::Value> GetMallocMemoryUsage(v8::Isolate* isolate,
+      uint64_t maxSize, uint64_t maxCount);
+#endif
 
  private:
   void ActivateUVLoop(v8::Isolate* isolate);

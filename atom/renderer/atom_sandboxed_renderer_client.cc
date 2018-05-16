@@ -105,6 +105,9 @@ void InitializeBindingsImpl(AtomSandboxedRendererClient* self,
   b.SetMethod("getArgv", GetArgv);
   b.SetMethod("getProcessMemoryInfo", &AtomBindings::GetProcessMemoryInfo);
   b.SetMethod("getSystemMemoryInfo", &AtomBindings::GetSystemMemoryInfo);
+#if defined(OS_WIN)
+  b.SetMethod("getMallocMemoryUsage", &AtomBindings::GetMallocMemoryUsage);
+#endif
   b.SetMethod("startWatchdog",
       base::Bind(&AtomSandboxedRendererClient::StartWatchdog,
       base::Unretained(self)));

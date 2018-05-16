@@ -63,6 +63,9 @@ void AtomBindings::BindTo(v8::Isolate* isolate,
   dict.SetMethod("getCPUUsage",
       base::Bind(&AtomBindings::GetCPUUsage, base::Unretained(this)));
   dict.SetMethod("getIOCounters", &GetIOCounters);
+#if defined(OS_WIN)
+  dict.SetMethod("getMallocMemoryUsage", &GetMallocMemoryUsage);
+#endif
 #if defined(OS_POSIX)
   dict.SetMethod("setFdLimit", &base::SetFdLimit);
 #endif
@@ -230,5 +233,44 @@ v8::Local<v8::Value> AtomBindings::GetIOCounters(v8::Isolate* isolate) {
 
   return dict.GetHandle();
 }
+
+#if defined(OS_WIN)
+
+// static
+v8::Local<v8::Value> AtomBindings::GetMallocMemoryUsage(v8::Isolate* isolate,
+    uint64_t maxSize, uint64_t maxCount) {
+  uint64_t committedSize = 0;
+  uint64_t uncommittedSize = 0;
+  uint64_t allocatedObjectsSize = 0;
+  uint64_t allocatedObjectsCount = 0;
+  HANDLE crt_heap = reinterpret_cast<HANDLE>(_get_heap_handle());
+  HeapLock(crt_heap);
+  PROCESS_HEAP_ENTRY heap_entry = {};
+  while (HeapWalk(crt_heap, &heap_entry) != FALSE) {
+    if (heap_entry.wFlags & PROCESS_HEAP_ENTRY_BUSY) {
+      allocatedObjectsSize += heap_entry.cbData;
+      allocatedObjectsCount++;
+    }
+    else if (heap_entry.wFlags & PROCESS_HEAP_REGION) {
+      committedSize += heap_entry.Region.dwCommittedSize;
+      uncommittedSize += heap_entry.Region.dwUnCommittedSize;
+    }
+    if (allocatedObjectsSize >= maxSize ||
+        allocatedObjectsCount >= maxCount ||
+        (committedSize + uncommittedSize) >= maxSize) {
+      break;
+    }
+  }
+  HeapUnlock(crt_heap);
+
+  mate::Dictionary dict = mate::Dictionary::CreateEmpty(isolate);
+  dict.Set("committedSize", committedSize);
+  dict.Set("uncommittedSize", uncommittedSize);
+  dict.Set("allocatedObjectsSize", allocatedObjectsSize);
+  dict.Set("allocatedObjectsCount", allocatedObjectsCount);
+  return dict.GetHandle();
+}
+
+#endif
 
 }  // namespace atom
