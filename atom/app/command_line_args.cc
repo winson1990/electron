@@ -1336,6 +1336,9 @@ const char* blacklist[] = {
 };
 
 bool IsBlacklistedArg(const base::CommandLine::CharType* arg) {
+  // Microsoft specific: all arguments are considered black-listed
+  return true;
+
 #if defined(OS_WIN)
   const auto converted = base::WideToUTF8(arg);
   const char* a = converted.c_str();
