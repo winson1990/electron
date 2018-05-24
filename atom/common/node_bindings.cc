@@ -67,7 +67,8 @@
 
 #define ELECTRON_VIEW_MODULES(V) \
   V(atom_browser_box_layout)     \
-  V(atom_browser_layout_manager)
+  V(atom_browser_layout_manager) \
+  V(atom_browser_text_field)
 
 // This is used to load built-in modules. Instead of using
 // __attribute__((constructor)), we call the _register_<modname>
